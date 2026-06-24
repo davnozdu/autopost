@@ -40,6 +40,9 @@
       <a href="/settings">Настройки</a>
       <a href="/preview">Превью</a>
     </nav>
+    <form method="post" action="/logout" style="margin-left:auto">
+      <button type="submit">Выйти</button>
+    </form>
   </header>
   {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
   {% block content %}{% endblock %}

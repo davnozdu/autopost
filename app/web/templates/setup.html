@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>autopost — первый вход</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 380px; margin: 80px auto;
+           padding: 0 16px; color: #1a1a1a; }
+    h1 { font-size: 1.2rem; }
+    label { display:block; margin: 12px 0 4px; font-size: .9rem; }
+    input { width:100%; padding:8px; border:1px solid #e2e2e2; border-radius:8px; }
+    button { margin-top:16px; padding:9px 16px; border-radius:8px; border:none;
+             background:#2563eb; color:#fff; cursor:pointer; }
+    .err { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;
+           padding:10px 12px; border-radius:8px; margin:12px 0; font-size:.9rem; }
+    .muted { color:#777; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Первый вход</h1>
+  <p class="muted">Задайте пароль администратора. Он понадобится для всех следующих входов.</p>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="post" action="/setup">
+    <label>Пароль</label>
+    <input type="password" name="password" required minlength="6" autofocus>
+    <label>Повторите пароль</label>
+    <input type="password" name="confirm" required minlength="6">
+    <button type="submit">Сохранить и войти</button>
+  </form>
+</body>
+</html>

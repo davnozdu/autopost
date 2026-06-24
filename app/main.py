@@ -3,16 +3,22 @@
 Пайплайн (минимальная версия):
   Источники (RSS) → Собрать → папки анализа → Обработать (LLM) → Превью → Одобрить.
 
+Доступ к админке защищён паролем, который задаётся при первом входе (/setup).
+
 Служебные эндпоинты:
-  GET  /health        — healthcheck
-  GET  /api/llm/info  — текущий провайдер/модель/base_url (без ключа)
-  POST /api/llm/test  — пробный вызов LLM (Hermes или DeepSeek)
+  GET  /health        — healthcheck (открыт, для Docker)
+  GET  /api/llm/info  — текущий провайдер/модель/base_url (защищён)
+  POST /api/llm/test  — пробный вызов LLM (защищён)
 """
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi.responses import RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import Request
 
+from app.auth import RedirectException, auth_router, require_auth
 from app.config import get_settings
 from app.db.session import init_db
 from app.llm.client import LLMClient, LLMError
@@ -25,8 +31,22 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="autopost", version="0.2.0", lifespan=lifespan)
-app.include_router(router)
+app = FastAPI(title="autopost", version="0.3.0", lifespan=lifespan)
+
+# Сессии для входа (подписанная cookie). SECRET_KEY должен быть стабильным,
+# иначе все сессии инвалидируются при перезапуске.
+app.add_middleware(SessionMiddleware, secret_key=get_settings().secret_key)
+
+
+@app.exception_handler(RedirectException)
+async def _redirect_handler(request: Request, exc: RedirectException):
+    return RedirectResponse(exc.url, status_code=303)
+
+
+# Маршруты входа/установки пароля — без защиты.
+app.include_router(auth_router)
+# Админка — только после входа.
+app.include_router(router, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")
@@ -34,7 +54,7 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@app.get("/api/llm/info")
+@app.get("/api/llm/info", dependencies=[Depends(require_auth)])
 def llm_info() -> dict:
     s = get_settings()
     return {
@@ -46,7 +66,7 @@ def llm_info() -> dict:
     }
 
 
-@app.post("/api/llm/test")
+@app.post("/api/llm/test", dependencies=[Depends(require_auth)])
 def llm_test() -> dict:
     """Пробный вызов модели — проверка, что Hermes/DeepSeek отвечает."""
     try:

@@ -22,11 +22,9 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_timeout_seconds: float = 120.0
 
-    # --- Админка ---
-    admin_user: str = "admin"
-    admin_password: str = "change-me"
-
     # --- Прочее ---
+    # Подпись cookie-сессий. Должен быть стабильным между перезапусками,
+    # иначе все входы сбрасываются. Пароль админки задаётся при первом входе.
     secret_key: str = "dev-secret-change-me"
     data_dir: str = "data"
 

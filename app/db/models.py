@@ -30,6 +30,9 @@ class AppConfig(SQLModel, table=True):
         "Přepiš novinku jako originální SEO článek, neopisuj doslova. "
         "Zachovej fakta a uveď odkaz na zdroj."
     )
+    # Пароль админки. Пусто → ещё не задан (первый вход).
+    password_hash: str = ""
+    password_salt: str = ""
 
 
 class Article(SQLModel, table=True):
