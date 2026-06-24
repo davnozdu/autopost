@@ -4,25 +4,40 @@
 
 <p><a href="/preview">← К превью</a></p>
 
-<article class="card">
-  <h1 style="font-size:1.4rem;margin-top:0">{{ a.title }}</h1>
-  <p class="muted" style="margin-top:0">
-    {{ a.feed_name }} · статус: {{ a.status }}
-    {% if a.dest_site %} · сайт: {{ a.dest_site }}{% endif %}
-    {% if a.languages %} · переводы: {{ a.languages.upper() }}{% endif %}
-  </p>
-  {% if a.image_url %}<img src="{{ a.image_url }}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0"><p class="muted" style="font-size:.8rem">{{ a.image_url }}</p>{% endif %}
+<p class="muted">
+  {{ a.site_name }} · статус: {{ a.status }}
+  {% if a.languages %} · переводы: {{ a.languages.upper() }}{% endif %}
+</p>
 
-  <div style="white-space:pre-wrap;line-height:1.55">{{ a.body }}</div>
+<form method="post" action="/articles/{{ a.id }}" class="card">
+  <label>Заголовок</label>
+  <input type="text" name="title" value="{{ a.title }}">
 
-  {% if a.publish_note %}
-    <p class="muted" style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">{{ a.publish_note }}</p>
+  <label>Аннотация (для превью)</label>
+  <textarea name="annotation" style="min-height:60px">{{ a.annotation }}</textarea>
+
+  {% if a.image_url %}
+    <label>Изображение</label>
+    <img src="{{ a.image_url }}" alt="" style="max-width:100%;border-radius:8px;margin:4px 0">
+    <p class="muted" style="font-size:.8rem">{{ a.image_url }}</p>
   {% endif %}
-</article>
 
-<div class="actions" style="margin-top:8px">
+  <label>Текст статьи</label>
+  <textarea name="body" style="min-height:320px">{{ a.body }}</textarea>
+
+  <label>Дата публикации</label>
+  <input type="datetime-local" name="publish_at" value="{{ publish_local }}" style="width:auto">
+
+  <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+</form>
+
+{% if a.publish_note %}
+  <p class="muted">{{ a.publish_note }}</p>
+{% endif %}
+
+<div class="actions">
   <form method="post" action="/articles/{{ a.id }}/publish">
-    <button class="primary" type="submit">Опубликовать</button>
+    <button class="primary" type="submit">Опубликовать сейчас</button>
   </form>
   <form method="post" action="/articles/{{ a.id }}/delete"
         onsubmit="return confirm('Удалить статью безвозвратно?')">

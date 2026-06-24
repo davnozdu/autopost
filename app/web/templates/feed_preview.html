@@ -2,9 +2,9 @@
 {% block title %}Просмотр ленты{% endblock %}
 {% block content %}
 
-<p><a href="/">← К источникам</a></p>
-<h2 style="font-size:1.15rem;margin-bottom:4px">{{ feed.name }}</h2>
-<p class="muted" style="margin-top:0">{{ feed.url }}</p>
+<p><a href="/sites/{{ src.site_id }}">← К сайту</a></p>
+<h2 style="font-size:1.15rem;margin-bottom:4px">{{ src.name }}</h2>
+<p class="muted" style="margin-top:0">{{ src.url }}</p>
 
 {% if data.error %}
   <div class="card" style="border-color:#fecaca;background:#fef2f2">
@@ -14,13 +14,11 @@
 {% elif data.count == 0 %}
   <div class="card" style="border-color:#fde68a;background:#fffbeb">
     <strong>Лента доступна, но записей не найдено.</strong>
-    <p class="muted" style="margin-bottom:0">Проверьте, что это корректный RSS/Atom-адрес.</p>
   </div>
 {% else %}
   <div class="card" style="border-color:#a7f3d0;background:#ecfdf5">
     <strong style="color:#065f46">Поток подключён ✓</strong>
-    <span class="muted">— записей в ленте: {{ data.count }}{% if data.feed_title %} · «{{ data.feed_title }}»{% endif %}.
-    Ниже последние {{ data.entries|length }}.</span>
+    <span class="muted">— записей: {{ data.count }}{% if data.feed_title %} · «{{ data.feed_title }}»{% endif %}.</span>
   </div>
 
   {% for e in data.entries %}
@@ -36,8 +34,7 @@
         <span class="muted">Уже обработано ✓</span>
       {% else %}
         <form method="post" action="/process-one">
-          <input type="hidden" name="feed_id" value="{{ feed.id }}">
-          <input type="hidden" name="feed_name" value="{{ feed.name }}">
+          <input type="hidden" name="site_id" value="{{ src.site_id }}">
           <input type="hidden" name="title" value="{{ e.title }}">
           <input type="hidden" name="link" value="{{ e.link }}">
           <input type="hidden" name="image" value="{{ e.image or '' }}">

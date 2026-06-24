@@ -35,20 +35,57 @@ DEFAULT_LLM_INSTRUCTIONS = (
     "- статья подаётся как полностью самостоятельная и авторская."
 )
 
-# Языки перевода для заливки (код → метка). Используется в настройках источника.
-LANGUAGES = [("ru", "RU"), ("en", "EN"), ("cz", "CZ"), ("de", "DE")]
+# Языки перевода для заливки (код → метка). Используется в настройках сайта.
+LANGUAGES = [("ru", "RU"), ("en", "EN"), ("cz", "CZ"), ("de", "DE"), ("ua", "UA")]
+
+# Дни недели для расписания (код APScheduler → метка).
+WEEKDAYS = [
+    ("mon", "Пн"), ("tue", "Вт"), ("wed", "Ср"), ("thu", "Чт"),
+    ("fri", "Пт"), ("sat", "Сб"), ("sun", "Вс"),
+]
+
+
+class Site(SQLModel, table=True):
+    """Сайт назначения: параметры публикации, языки, расписание."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    # Публикация
+    repo: str = ""           # owner/name
+    branch: str = "main"
+    articles_path: str = ""  # путь в репозитории, напр. content/articles
+    template_ref: str = ""   # имя/путь файла-шаблона
+    # Языки перевода через запятую, напр. "ru,en,cz"
+    languages: str = ""
+    # Расписание: дни через запятую (mon,fri) + время HH:MM
+    collect_days: str = "mon,fri"
+    collect_time: str = "09:00"
+    publish_days: str = "wed,sun"
+    publish_time: str = "09:00"
+    publish_per_run: int = 3  # сколько публиковать за один публикационный день
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Source(SQLModel, table=True):
+    """RSS-источник, привязанный к сайту."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    site_id: int = Field(index=True)
+    name: str
+    url: str
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=_now)
 
 
 class Feed(SQLModel, table=True):
-    """RSS-источник."""
+    """Legacy: плоский RSS-источник (до модели Сайт→Источники). Только для миграции."""
 
     id: int | None = Field(default=None, primary_key=True)
     name: str
     url: str
     enabled: bool = True
-    # Сайт назначения для публикации.
     dest_site: str = ""
-    # Языки перевода через запятую, напр. "ru,en,cz".
     languages: str = ""
     created_at: datetime = Field(default_factory=_now)
 
@@ -61,29 +98,27 @@ class AppConfig(SQLModel, table=True):
     chars_per_news: int = 1500
     images_from_source_only: bool = True
     llm_instructions: str = DEFAULT_LLM_INSTRUCTIONS
-    # Выбранная модель (переопределяет дефолт провайдера). Пусто → дефолт.
     llm_model: str = ""
-    # Пароль админки. Пусто → ещё не задан (первый вход).
     password_hash: str = ""
     password_salt: str = ""
 
 
 class Article(SQLModel, table=True):
-    """Подготовленная новость (результат LLM) и её статус."""
+    """Подготовленная статья: текст, расписание и статус."""
 
     id: int | None = Field(default=None, primary_key=True)
-    feed_name: str = ""
+    site_id: int = Field(default=0, index=True)
+    site_name: str = ""
     source_title: str = ""
-    source_url: str = ""
-    source_path: str = Field(default="", index=True)  # папка новости (если из «Собрать»)
+    source_url: str = Field(default="", index=True)
+    source_path: str = ""
     image_url: str | None = None
     title: str = ""
-    annotation: str = ""  # краткая аннотация для превью
+    annotation: str = ""
     body: str = ""
-    # Снимок настроек источника на момент обработки (для публикации/переводов).
-    dest_site: str = ""
-    languages: str = ""
-    status: str = "prepared"  # prepared | approved | rejected | published
+    languages: str = ""  # снимок языков сайта на момент обработки
+    status: str = "draft"  # draft | scheduled | published | failed
+    publish_at: datetime | None = None
+    published_at: datetime | None = None
     publish_note: str = ""
     created_at: datetime = Field(default_factory=_now)
-    approved_at: datetime | None = None

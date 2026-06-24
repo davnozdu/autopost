@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
+from app import scheduler
 from app.auth import RedirectException, auth_router, require_auth
 from app.config import get_settings
 from app.db.session import init_db
@@ -28,7 +29,11 @@ from app.web.routes import router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown()
 
 
 app = FastAPI(title="autopost", version="0.3.0", lifespan=lifespan)

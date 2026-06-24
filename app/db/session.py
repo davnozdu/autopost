@@ -65,6 +65,31 @@ _OLD_DEFAULT_INSTRUCTIONS = (
 )
 
 
+def _migrate_feeds_to_sites(s: Session) -> None:
+    """Перенос legacy-источников Feed в модель Site→Source (однократно)."""
+    from sqlmodel import select
+
+    from app.db import models
+
+    if s.exec(select(models.Source)).first() is not None:
+        return  # уже мигрировано
+    feeds = s.exec(select(models.Feed)).all()
+    if not feeds:
+        return
+    # группируем по сайту назначения
+    by_site: dict[str, list] = {}
+    for f in feeds:
+        by_site.setdefault(f.dest_site or "Мой сайт", []).append(f)
+    for site_name, group in by_site.items():
+        site = models.Site(name=site_name, languages=group[0].languages or "")
+        s.add(site)
+        s.commit()
+        s.refresh(site)
+        for f in group:
+            s.add(models.Source(site_id=site.id, name=f.name, url=f.url, enabled=f.enabled))
+        s.commit()
+
+
 def init_db() -> None:
     # импорт моделей нужен, чтобы они зарегистрировались в metadata
     from app.db import models  # noqa: F401
@@ -80,6 +105,7 @@ def init_db() -> None:
             config.llm_instructions = models.DEFAULT_LLM_INSTRUCTIONS
             s.add(config)
             s.commit()
+        _migrate_feeds_to_sites(s)
 
 
 def analysis_dir() -> Path:

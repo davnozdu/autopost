@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ site.name }}{% endblock %}
+{% block content %}
+
+<p><a href="/">← К сайтам</a></p>
+<h2 style="font-size:1.2rem;margin-bottom:4px">{{ site.name }}</h2>
+
+<div class="card">
+  <div class="actions">
+    <form method="post" action="/sites/{{ site.id }}/collect">
+      <button class="primary" type="submit">Собрать сейчас</button></form>
+    <form method="post" action="/sites/{{ site.id }}/publish-now">
+      <button type="submit">Опубликовать запланированное</button></form>
+  </div>
+  {% if runs %}
+  <p class="muted" style="margin-bottom:0">Ближайшие запуски:
+    {% for r in runs %}{{ r.id }} → {{ r.next_run or "—" }}{% if not loop.last %}; {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3 style="font-size:1.05rem;margin-top:0">Настройки сайта</h3>
+  <form method="post" action="/sites/{{ site.id }}">
+    <label>Название</label>
+    <input type="text" name="name" value="{{ site.name }}" required>
+
+    <label>GitHub-репозиторий (owner/name)</label>
+    <input type="text" name="repo" value="{{ site.repo }}" placeholder="user/site-repo">
+    <div style="display:flex;gap:12px">
+      <div style="flex:1"><label>Ветка</label>
+        <input type="text" name="branch" value="{{ site.branch }}"></div>
+      <div style="flex:2"><label>Путь к статьям</label>
+        <input type="text" name="articles_path" value="{{ site.articles_path }}" placeholder="content/articles"></div>
+    </div>
+    <label>Шаблон файла статьи</label>
+    <input type="text" name="template_ref" value="{{ site.template_ref }}" placeholder="имя/путь шаблона">
+
+    <label>Языки перевода</label>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+      {% for code, lbl in languages %}
+      <label style="display:flex;gap:6px;align-items:center;margin:0">
+        <input type="checkbox" name="langs" value="{{ code }}" style="width:auto"
+               {% if code in site_langs %}checked{% endif %}> {{ lbl }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <label style="margin-top:14px">Дни сбора</label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">
+      {% for code, lbl in weekdays %}
+      <label style="display:flex;gap:6px;align-items:center;margin:0">
+        <input type="checkbox" name="collect_days" value="{{ code }}" style="width:auto"
+               {% if code in collect_days %}checked{% endif %}> {{ lbl }}
+      </label>
+      {% endfor %}
+    </div>
+    <label>Время сбора</label>
+    <input type="time" name="collect_time" value="{{ site.collect_time }}" style="width:auto">
+
+    <label style="margin-top:14px">Дни публикации</label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">
+      {% for code, lbl in weekdays %}
+      <label style="display:flex;gap:6px;align-items:center;margin:0">
+        <input type="checkbox" name="publish_days" value="{{ code }}" style="width:auto"
+               {% if code in publish_days %}checked{% endif %}> {{ lbl }}
+      </label>
+      {% endfor %}
+    </div>
+    <label>Время публикации</label>
+    <input type="time" name="publish_time" value="{{ site.publish_time }}" style="width:auto">
+
+    <label>Публиковать за один день (шт.)</label>
+    <input type="number" name="publish_per_run" value="{{ site.publish_per_run }}" min="1" style="width:auto">
+
+    <label style="display:flex;gap:8px;align-items:center;margin-top:14px">
+      <input type="checkbox" name="enabled" value="true" style="width:auto"
+             {% if site.enabled %}checked{% endif %}> Автопилот включён
+    </label>
+
+    <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="font-size:1.05rem;margin-top:0">Источники (RSS)</h3>
+  {% if sources %}
+    {% for src in sources %}
+    <div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #eee;padding:8px 0">
+      <div style="min-width:0">
+        <strong>{{ src.name }}</strong>
+        <div class="muted" style="word-break:break-all">{{ src.url }}</div>
+      </div>
+      <div class="actions">
+        <a href="/sources/{{ src.id }}/preview"><button type="button">Просмотр</button></a>
+        <form method="post" action="/sources/{{ src.id }}/delete"
+              onsubmit="return confirm('Удалить источник?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted">Источников пока нет.</p>
+  {% endif %}
+  <form method="post" action="/sites/{{ site.id }}/sources" style="margin-top:12px">
+    <label>Название</label>
+    <input type="text" name="name" required placeholder="tzb-info">
+    <label>RSS URL</label>
+    <input type="url" name="url" required placeholder="https://www.tzb-info.cz/rss.xml">
+    <div style="margin-top:12px"><button class="primary" type="submit">Добавить источник</button></div>
+  </form>
+</div>
+
+{% endblock %}

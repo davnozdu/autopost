@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # иначе все входы сбрасываются. Пароль админки задаётся при первом входе.
     secret_key: str = "dev-secret-change-me"
     data_dir: str = "data"
+    # Таймзона планировщика (env TZ). От неё зависят дни/время сбора и публикации.
+    tz: str = "Europe/Prague"
 
     def resolved_base_url(self) -> str:
         preset = get_preset(self.llm_provider)

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Сайты{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Добавить сайт</h2>
+  <form method="post" action="/sites">
+    <label>Название сайта</label>
+    <input type="text" name="name" required placeholder="stavba.example.cz">
+    <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
+  </form>
+  <p class="muted" style="margin-bottom:0">Внутри сайта добавляются RSS-источники, языки перевода и расписание.</p>
+</div>
+
+<h2 style="font-size:1.05rem">Сайты</h2>
+{% if sites %}
+  {% for site in sites %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+      <strong>{{ site.name }}</strong>
+      <div class="actions">
+        <a href="/sites/{{ site.id }}"><button type="button" class="primary">Настроить</button></a>
+        <form method="post" action="/sites/{{ site.id }}/delete"
+              onsubmit="return confirm('Удалить сайт и его источники?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      {% if site.enabled %}активен{% else %}выключен{% endif %}
+      · сбор: {{ site.collect_days }} {{ site.collect_time }}
+      · публикация: {{ site.publish_days }} {{ site.publish_time }}
+      {% if site.languages %} · языки: {{ site.languages.upper() }}{% endif %}
+    </p>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Пока нет сайтов. Создайте первый.</p>
+{% endif %}
+
+{% endblock %}
