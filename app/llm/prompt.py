@@ -73,6 +73,47 @@ def parse_article(raw: str, fallback_image: str | None = None) -> dict:
     }
 
 
+def build_translate_prompt(content: dict, target_name: str) -> tuple[str, str]:
+    """Промпт перевода статьи в целевой язык с сохранением HTML-структуры."""
+    system = (
+        f"You are a professional translator and SEO editor. Translate the article into "
+        f"{target_name}. Keep it natural and idiomatic (not literal), preserve meaning, "
+        f"facts and tone. In body_html translate ONLY the text and keep the HTML structure "
+        f"and tags ({ALLOWED_TAGS}) intact. Do not mention or add any source. "
+        'Return ONLY valid JSON: {"title":"...","annotation":"...","meta_description":"...",'
+        '"tag":"...","keywords":["...","..."],"body_html":"..."}.'
+    )
+    user = json.dumps(
+        {
+            "title": content.get("title", ""),
+            "annotation": content.get("annotation", ""),
+            "meta_description": content.get("meta_description", ""),
+            "tag": content.get("tag", ""),
+            "keywords": content.get("keywords", ""),
+            "body_html": content.get("body_html", ""),
+        },
+        ensure_ascii=False,
+    )
+    return system, user
+
+
+def parse_translation(raw: str, fallback: dict) -> dict:
+    data = _extract_json(raw) or {}
+    kw = data.get("keywords")
+    if isinstance(kw, list):
+        keywords = ", ".join(str(k).strip() for k in kw if str(k).strip())
+    else:
+        keywords = (kw or fallback.get("keywords", "")).strip()
+    return {
+        "title": (data.get("title") or fallback.get("title", "")).strip(),
+        "annotation": (data.get("annotation") or fallback.get("annotation", "")).strip(),
+        "meta_description": (data.get("meta_description") or fallback.get("meta_description", "")).strip(),
+        "tag": (data.get("tag") or fallback.get("tag", "")).strip(),
+        "keywords": keywords,
+        "body_html": (data.get("body_html") or fallback.get("body_html", "")).strip(),
+    }
+
+
 def _text_excerpt(html: str, n: int) -> str:
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()

@@ -18,6 +18,8 @@
   <meta name="author" content="Big Tweak s.r.o." />
 
   <link rel="canonical" href="{{ canonical }}" />
+  {% for alt in alternates %}<link rel="alternate" hreflang="{{ alt }}" href="{{ domain }}/{{ alt }}/blog/{{ slug }}/" />
+  {% endfor %}{% if alternates %}<link rel="alternate" hreflang="x-default" href="{{ domain }}/{{ alternates[0] }}/blog/{{ slug }}/" />{% endif %}
   <link rel="icon" type="image/png" href="/assets/logo.png" />
 
   <meta property="og:type" content="article" />

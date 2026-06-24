@@ -1,12 +1,14 @@
-"""Рендер статьи из шаблона сайта (Jinja2) + сборка meta.json."""
+"""Рендер страницы статьи из шаблона сайта (Jinja2) + сборка meta.json.
+
+render_page рендерит конкретную языковую версию (контент уже на нужном языке).
+"""
 
 import re
 from datetime import datetime, timezone
 
 from jinja2 import Environment, select_autoescape
 
-from app.db.models import Article, Site
-from app.util import lang_segment
+from app.db.models import Site
 
 _MONTHS = {
     "ru": ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
@@ -30,47 +32,55 @@ def _date_human(d: datetime, lang: str) -> str:
 
 
 def _strip_scripts(html: str) -> str:
-    # лёгкая защита: вырезать <script>/<style> и on*-атрибуты из тела от LLM
     html = re.sub(r"<\s*(script|style)\b[\s\S]*?<\s*/\s*\1\s*>", "", html, flags=re.I)
     html = re.sub(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", "", html, flags=re.I)
     return html
 
 
-def render_article(article: Article, site: Site) -> tuple[str, dict, str]:
-    """Вернуть (html_страницы, meta_dict, path_base)."""
-    lang = lang_segment(article.lang)
-    slug = article.slug or "article"
-    when = article.publish_at or datetime.now(timezone.utc)
+def render_page(
+    site: Site,
+    *,
+    lang: str,
+    slug: str,
+    content: dict,
+    image_url: str | None,
+    publish_at: datetime | None,
+    alternates: list[str],
+) -> tuple[str, dict, str]:
+    """Вернуть (html, meta_dict, path_base) для языковой версии статьи."""
+    when = publish_at or datetime.now(timezone.utc)
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
     date_iso = when.date().isoformat()
     date_human = _date_human(when, lang)
     url = f"/{lang}/blog/{slug}/"
+    annotation = content.get("annotation", "")
 
     ctx = {
         "lang": lang,
         "slug": slug,
-        "title": article.title,
-        "meta_description": article.meta_description or article.annotation,
-        "keywords": article.keywords,
-        "tag": article.tag,
-        "image_url": article.image_url or "",
-        "body_html": _strip_scripts(article.body or ""),
+        "title": content.get("title", ""),
+        "meta_description": content.get("meta_description") or annotation,
+        "keywords": content.get("keywords", ""),
+        "tag": content.get("tag", ""),
+        "image_url": image_url or "",
+        "body_html": _strip_scripts(content.get("body_html", "")),
         "date_iso": date_iso,
         "date_human": date_human,
-        "annotation": article.annotation,
+        "annotation": annotation,
+        "alternates": alternates or [],
     }
     html = _env.from_string(site.template).render(**ctx)
 
     meta = {
-        "title": article.title,
+        "title": content.get("title", ""),
         "slug": slug,
         "url": url,
         "date": date_iso,
         "date_human": date_human,
-        "tag": article.tag,
-        "annotation": article.annotation,
-        "image": article.image_url or "",
+        "tag": content.get("tag", ""),
+        "annotation": annotation,
+        "image": image_url or "",
     }
     path_base = (site.path_pattern or "{lang}/blog/{slug}").format(lang=lang, slug=slug)
     return html, meta, path_base

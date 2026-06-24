@@ -1,22 +1,36 @@
-"""Публикация одобренной статьи: рендер по шаблону сайта + push в GitHub.
+"""Публикация статьи: рендер по шаблону сайта + push в GitHub, на язык генерации
+и на каждый выбранный язык сайта (через перевод DeepSeek). Общий slug, hreflang.
 
-GitHub после push сам заливает по FTP на хостинг. Листинг/RSS строит PHP на сайте,
-поэтому генератору достаточно записать index.html + meta.json статьи.
+GitHub после push сам заливает по FTP. Листинг/RSS строит PHP на сайте.
 """
 
 import json
 
 from sqlmodel import Session
 
-from app.db.models import Article, Site
+from app.db.models import AppConfig, Article, Site
 from app.db.session import engine
+from app.llm.client import LLMClient, LLMError
+from app.llm.prompt import build_translate_prompt, parse_translation
 from app.publisher.github import put_file
-from app.publisher.render import render_article
+from app.publisher.render import render_page
+from app.util import lang_name, lang_segment
+
+
+def _target_langs(article: Article, site: Site) -> list[str]:
+    """Сегменты языков для публикации: язык генерации первым, затем языки сайта."""
+    out = [lang_segment(article.lang)]
+    for code in (site.languages or "").split(","):
+        seg = lang_segment(code.strip())
+        if code.strip() and seg not in out:
+            out.append(seg)
+    return out
 
 
 def publish(article: Article) -> dict:
     with Session(engine) as s:
         site = s.get(Site, article.site_id)
+        config = s.get(AppConfig, 1) or AppConfig(id=1)
 
     if not site:
         return {"published": False, "note": "Сайт статьи не найден."}
@@ -27,17 +41,50 @@ def publish(article: Article) -> dict:
         return {"published": False,
                 "note": "Не настроен репозиторий или GitHub-токен сайта."}
 
-    try:
-        html, meta, path_base = render_article(article, site)
-        meta_json = json.dumps(meta, ensure_ascii=False, indent=2)
-        put_file(site.repo, site.branch, f"{path_base}/index.html",
-                 html.encode("utf-8"), site.github_token,
-                 f"blog: {article.title}")
-        put_file(site.repo, site.branch, f"{path_base}/meta.json",
-                 meta_json.encode("utf-8"), site.github_token,
-                 f"blog meta: {meta['slug']}")
-    except Exception as exc:  # noqa: BLE001
-        return {"published": False, "note": f"Ошибка публикации: {str(exc)[:200]}"}
+    primary = lang_segment(article.lang)
+    base_content = {
+        "title": article.title,
+        "annotation": article.annotation,
+        "meta_description": article.meta_description,
+        "tag": article.tag,
+        "keywords": article.keywords,
+        "body_html": article.body,
+    }
+    targets = _target_langs(article, site)
+    client = LLMClient()
 
-    return {"published": True, "url": meta["url"],
-            "note": f"Опубликовано: {meta['url']}"}
+    published_urls, errors = [], []
+    for seg in targets:
+        # контент: оригинал для языка генерации, иначе перевод
+        if seg == primary:
+            content = base_content
+        else:
+            try:
+                system, user = build_translate_prompt(base_content, lang_name(seg))
+                res = client.chat(system, user, json_mode=True, temperature=0.3,
+                                  model=(config.llm_model or None))
+                content = parse_translation(res.text, base_content)
+            except LLMError as exc:
+                errors.append(f"{seg}: перевод не удался ({str(exc)[:80]})")
+                continue
+        try:
+            html, meta, path_base = render_page(
+                site, lang=seg, slug=article.slug, content=content,
+                image_url=article.image_url, publish_at=article.publish_at,
+                alternates=targets,
+            )
+            put_file(site.repo, site.branch, f"{path_base}/index.html",
+                     html.encode("utf-8"), site.github_token, f"blog [{seg}]: {meta['title']}")
+            put_file(site.repo, site.branch, f"{path_base}/meta.json",
+                     json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8"),
+                     site.github_token, f"blog meta [{seg}]: {article.slug}")
+            published_urls.append(meta["url"])
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{seg}: {str(exc)[:80]}")
+
+    if not published_urls:
+        return {"published": False, "note": "Публикация не удалась: " + "; ".join(errors)}
+    note = "Опубликовано: " + ", ".join(published_urls)
+    if errors:
+        note += " | ошибки: " + "; ".join(errors)
+    return {"published": True, "url": published_urls[0], "note": note}

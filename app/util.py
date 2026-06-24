@@ -30,3 +30,17 @@ LANG_PATH = {"cz": "cs", "cs": "cs", "ru": "ru", "ua": "uk", "uk": "uk",
 
 def lang_segment(lang: str) -> str:
     return LANG_PATH.get((lang or "cs").strip().lower(), (lang or "cs").strip().lower())
+
+
+# Сегмент языка → человекочитаемое название для промпта перевода.
+LANG_NAME = {
+    "cs": "Czech (čeština)",
+    "ru": "Russian (русский)",
+    "en": "English",
+    "uk": "Ukrainian (українська)",
+    "de": "German (Deutsch)",
+}
+
+
+def lang_name(seg: str) -> str:
+    return LANG_NAME.get(seg, seg)
