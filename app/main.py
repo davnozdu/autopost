@@ -1,38 +1,41 @@
-"""FastAPI-приложение: каркас (Фаза 0).
+"""FastAPI-приложение autopost.
 
-Сейчас доступно:
-- GET /            — заглушка админки со статусом конфигурации LLM
-- GET /health      — healthcheck
-- GET /api/llm/info — текущий провайдер/модель/base_url (без ключа)
-- POST /api/llm/test — пробный вызов LLM (Hermes или DeepSeek) коротким промптом
+Пайплайн (минимальная версия):
+  Источники (RSS) → Собрать → папки анализа → Обработать (LLM) → Превью → Одобрить.
 
-Последующие фазы добавят: источники, scraper, очередь статей, Telegram, публикацию.
+Служебные эндпоинты:
+  GET  /health        — healthcheck
+  GET  /api/llm/info  — текущий провайдер/модель/base_url (без ключа)
+  POST /api/llm/test  — пробный вызов LLM (Hermes или DeepSeek)
 """
 
-from pathlib import Path
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
 
 from app.config import get_settings
+from app.db.session import init_db
 from app.llm.client import LLMClient, LLMError
+from app.web.routes import router
 
-app = FastAPI(title="autopost", version="0.1.0")
 
-templates = Jinja2Templates(
-    directory=str(Path(__file__).parent / "web" / "templates")
-)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="autopost", version="0.2.0", lifespan=lifespan)
+app.include_router(router)
 
 
 @app.get("/health")
-async def health() -> dict:
+def health() -> dict:
     return {"status": "ok"}
 
 
 @app.get("/api/llm/info")
-async def llm_info() -> dict:
+def llm_info() -> dict:
     s = get_settings()
     return {
         "provider": s.llm_provider,
@@ -44,11 +47,10 @@ async def llm_info() -> dict:
 
 
 @app.post("/api/llm/test")
-async def llm_test() -> dict:
+def llm_test() -> dict:
     """Пробный вызов модели — проверка, что Hermes/DeepSeek отвечает."""
-    client = LLMClient()
     try:
-        result = await client.chat(
+        result = LLMClient().chat(
             system="Odpovídej stručně česky.",
             user="Napiš jednu větu na téma stavba a rekonstrukce.",
             temperature=0.3,
@@ -61,17 +63,3 @@ async def llm_test() -> dict:
         "model": result.model,
         "text": result.text,
     }
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    s = get_settings()
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "provider": s.llm_provider,
-            "model": s.resolved_model(),
-            "key_configured": bool(s.llm_key),
-        },
-    )

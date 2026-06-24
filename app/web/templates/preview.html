@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Превью{% endblock %}
+{% block content %}
+
+<h2 style="font-size:1.1rem">Подготовленные новости</h2>
+
+{% if articles %}
+  {% for a in articles %}
+  <div class="card">
+    <h3 style="margin:0 0 6px">{{ a.title }}</h3>
+    <p class="muted" style="margin:0 0 8px">
+      Источник: {{ a.feed_name }} ·
+      {% if a.source_url %}<a href="{{ a.source_url }}" target="_blank">оригинал</a>{% endif %}
+    </p>
+    {% if a.image_url %}<img class="thumb" src="{{ a.image_url }}" alt="">{% endif %}
+    <p style="white-space:pre-wrap">{{ a.body[:600] }}{% if a.body|length > 600 %}…{% endif %}</p>
+    <div class="actions">
+      <form method="post" action="/articles/{{ a.id }}/approve">
+        <button class="primary" type="submit">Одобрить</button>
+      </form>
+      <form method="post" action="/articles/{{ a.id }}/reject">
+        <button class="danger" type="submit">Отклонить</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Нет подготовленных новостей. Соберите и обработайте источники на вкладке «Источники».</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Источники{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="actions">
+    <form method="post" action="/collect"><button class="primary" type="submit">Собрать новости</button></form>
+    <form method="post" action="/process"><button type="submit">Обработать через LLM</button></form>
+  </div>
+  <p class="muted" style="margin-bottom:0">«Собрать» качает RSS в папки анализа (до 10 партий на поток).
+     «Обработать» отдаёт новости модели и складывает результат во вкладку «Превью».</p>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Добавить RSS-источник</h2>
+  <form method="post" action="/feeds">
+    <label>Название</label>
+    <input type="text" name="name" required placeholder="estav.cz">
+    <label>RSS URL</label>
+    <input type="url" name="url" required placeholder="https://www.estav.cz/rss/clanky">
+    <div style="margin-top:12px"><button class="primary" type="submit">Добавить</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Источники</h2>
+  {% if feeds %}
+  <table>
+    <tr><th>Название</th><th>RSS URL</th><th></th></tr>
+    {% for f in feeds %}
+    <tr>
+      <td>{{ f.name }}</td>
+      <td class="muted">{{ f.url }}</td>
+      <td>
+        <form method="post" action="/feeds/{{ f.id }}/delete"
+              onsubmit="return confirm('Удалить источник?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Пока нет источников.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

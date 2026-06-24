@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>autopost — {% block title %}{% endblock %}</title>
+  <style>
+    :root { --b: #e2e2e2; --muted: #777; --accent: #2563eb; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 860px; margin: 0 auto;
+           padding: 0 16px 48px; color: #1a1a1a; }
+    header { display: flex; gap: 16px; align-items: center; padding: 16px 0;
+             border-bottom: 1px solid var(--b); margin-bottom: 20px; flex-wrap: wrap; }
+    header .brand { font-weight: 700; font-size: 1.1rem; }
+    nav a { margin-right: 14px; text-decoration: none; color: var(--accent); }
+    .card { border: 1px solid var(--b); border-radius: 10px; padding: 16px; margin: 14px 0; }
+    .muted { color: var(--muted); }
+    label { display: block; margin: 10px 0 4px; font-size: .9rem; }
+    input[type=text], input[type=url], input[type=number], textarea {
+      width: 100%; padding: 8px; border: 1px solid var(--b); border-radius: 8px;
+      font-size: .95rem; font-family: inherit; }
+    textarea { min-height: 110px; }
+    button { padding: 8px 14px; border-radius: 8px; border: 1px solid #ccc;
+             background: #f6f6f6; cursor: pointer; font-size: .9rem; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.danger { color: #b91c1c; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--b); vertical-align: top; }
+    .msg { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;
+           padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+    .actions { display: flex; gap: 8px; }
+    img.thumb { max-width: 160px; border-radius: 8px; display: block; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">autopost</span>
+    <nav>
+      <a href="/">Источники</a>
+      <a href="/settings">Настройки</a>
+      <a href="/preview">Превью</a>
+    </nav>
+  </header>
+  {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</body>
+</html>

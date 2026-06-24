@@ -1,4 +1,4 @@
-"""Провайдер-независимый LLM-клиент.
+"""Провайдер-независимый LLM-клиент (синхронный).
 
 Единая точка вызова модели по OpenAI-совместимому API. Подходит и для
 Hermes, и для DeepSeek, и для остальных пресетов — различается лишь
@@ -29,7 +29,7 @@ class LLMClient:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
 
-    async def chat(
+    def chat(
         self,
         system: str,
         user: str,
@@ -59,17 +59,17 @@ class LLMClient:
 
         url = f"{base_url}/chat/completions"
         try:
-            async with httpx.AsyncClient(
-                timeout=self.settings.llm_timeout_seconds
-            ) as client:
-                resp = await client.post(url, json=payload, headers=headers)
+            resp = httpx.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=self.settings.llm_timeout_seconds,
+            )
         except httpx.HTTPError as exc:
             raise LLMError(f"Сетевая ошибка при вызове {provider}: {exc}") from exc
 
         if resp.status_code >= 400:
-            raise LLMError(
-                f"{provider} вернул {resp.status_code}: {resp.text[:500]}"
-            )
+            raise LLMError(f"{provider} вернул {resp.status_code}: {resp.text[:500]}")
 
         data = resp.json()
         try:

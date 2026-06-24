@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Инструкции для LLM</h2>
+  <form method="post" action="/settings">
+    <label>Язык статьи</label>
+    <input type="text" name="language" value="{{ config.language }}">
+
+    <label>Символов на новость (примерно)</label>
+    <input type="number" name="chars_per_news" value="{{ config.chars_per_news }}" min="100" step="100">
+
+    <label style="display:flex;gap:8px;align-items:center;margin-top:14px">
+      <input type="checkbox" name="images_from_source_only" value="true"
+             style="width:auto" {% if config.images_from_source_only %}checked{% endif %}>
+      Картинки строго из источника новости
+    </label>
+
+    <label>Дополнительные инструкции</label>
+    <textarea name="llm_instructions">{{ config.llm_instructions }}</textarea>
+
+    <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
+{% endblock %}
