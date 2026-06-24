@@ -1,0 +1,36 @@
+# Production-развёртывание autopost из готового образа GHCR.
+#
+# Подготовка на сервере:
+#   1. Положите рядом файл .env (см. .env.example): LLM_PROVIDER, LLM_KEY,
+#      SECRET_KEY (длинная случайная строка!), для hermes — LLM_BASE_URL.
+#   2. Если пакет GHCR приватный — выполните:
+#        echo $GHCR_PAT | docker login ghcr.io -u davnozdu --password-stdin
+#   3. Запуск:
+#        docker compose -f deploy/docker-compose.yml up -d
+#   4. Откройте http://<сервер>:8080 → при первом входе задайте пароль.
+#
+# Обновление до новой версии:
+#        docker compose -f deploy/docker-compose.yml pull
+#        docker compose -f deploy/docker-compose.yml up -d
+
+services:
+  autopost:
+    image: ghcr.io/davnozdu/autopost:latest   # или :sha-305d407 для фиксированной версии
+    container_name: autopost
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data                       # БД + собранные новости (обязательно)
+      - ./templates_sites:/app/templates_sites # шаблоны сайта (для публикации)
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# LLM (Hermes или DeepSeek) — внешний, по LLM_BASE_URL; в compose не поднимается.
