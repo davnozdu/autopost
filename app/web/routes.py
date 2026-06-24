@@ -13,7 +13,7 @@ from app.db.models import AppConfig, Article, Feed
 from app.db.session import analysis_dir, engine
 from app.llm.client import LLMClient, LLMError
 from app.llm.prompt import build_prompt, parse_article
-from app.scraper.rss import collect_feed, iter_news_dirs, read_news
+from app.scraper.rss import collect_feed, iter_news_dirs, peek_feed, read_news
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -43,6 +43,18 @@ def add_feed(name: str = Form(...), url: str = Form(...)) -> RedirectResponse:
         s.add(Feed(name=name.strip(), url=url.strip()))
         s.commit()
     return _redirect("/", "Источник добавлен")
+
+
+@router.get("/feeds/{feed_id}/preview", response_class=HTMLResponse)
+def feed_preview(request: Request, feed_id: int) -> HTMLResponse:
+    with Session(engine) as s:
+        feed = s.get(Feed, feed_id)
+    if not feed:
+        return _redirect("/", "Источник не найден")
+    data = peek_feed(feed.url)
+    return templates.TemplateResponse(
+        request, "feed_preview.html", {"feed": feed, "data": data}
+    )
 
 
 @router.post("/feeds/{feed_id}/delete")

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Просмотр ленты{% endblock %}
+{% block content %}
+
+<p><a href="/">← К источникам</a></p>
+<h2 style="font-size:1.15rem;margin-bottom:4px">{{ feed.name }}</h2>
+<p class="muted" style="margin-top:0">{{ feed.url }}</p>
+
+{% if data.error %}
+  <div class="card" style="border-color:#fecaca;background:#fef2f2">
+    <strong style="color:#b91c1c">Не удалось разобрать ленту.</strong>
+    <p class="muted" style="margin-bottom:0">{{ data.error }}</p>
+  </div>
+{% elif data.count == 0 %}
+  <div class="card" style="border-color:#fde68a;background:#fffbeb">
+    <strong>Лента доступна, но записей не найдено.</strong>
+    <p class="muted" style="margin-bottom:0">Проверьте, что это корректный RSS/Atom-адрес.</p>
+  </div>
+{% else %}
+  <div class="card" style="border-color:#a7f3d0;background:#ecfdf5">
+    <strong style="color:#065f46">Поток подключён ✓</strong>
+    <span class="muted">— записей в ленте: {{ data.count }}{% if data.feed_title %} · «{{ data.feed_title }}»{% endif %}.
+    Ниже последние {{ data.entries|length }}.</span>
+  </div>
+
+  {% for e in data.entries %}
+  <div class="card">
+    <h3 style="margin:0 0 4px;font-size:1rem">
+      {% if e.link %}<a href="{{ e.link }}" target="_blank">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}
+    </h3>
+    {% if e.published %}<p class="muted" style="margin:0 0 6px;font-size:.85rem">{{ e.published }}</p>{% endif %}
+    {% if e.image %}<img class="thumb" src="{{ e.image }}" alt="">{% endif %}
+    {% if e.summary %}<p style="margin:6px 0 0">{{ e.summary }}{% if e.summary|length >= 300 %}…{% endif %}</p>{% endif %}
+  </div>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

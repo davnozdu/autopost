@@ -46,6 +46,28 @@ def _entry_image(entry) -> str | None:
     return None
 
 
+def peek_feed(feed_url: str, limit: int = MAX_ITEMS) -> dict:
+    """Живой предпросмотр ленты без сохранения — чтобы увидеть, что поток отдаёт."""
+    parsed = feedparser.parse(feed_url)
+    entries = []
+    for entry in parsed.entries[:limit]:
+        entries.append(
+            {
+                "title": entry.get("title", "(bez názvu)"),
+                "link": entry.get("link", ""),
+                "published": entry.get("published", ""),
+                "summary": _strip_html(entry.get("summary", ""))[:300],
+                "image": _entry_image(entry),
+            }
+        )
+    return {
+        "feed_title": (parsed.feed or {}).get("title", ""),
+        "count": len(parsed.entries),
+        "error": str(parsed.get("bozo_exception", "")) if parsed.get("bozo") else "",
+        "entries": entries,
+    }
+
+
 def collect_feed(feed_name: str, feed_url: str, analysis_dir: Path) -> tuple[list[dict], str]:
     parsed = feedparser.parse(feed_url)
     feed_dir = analysis_dir / slugify(feed_name)

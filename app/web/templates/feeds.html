@@ -32,10 +32,13 @@
       <td>{{ f.name }}</td>
       <td class="muted">{{ f.url }}</td>
       <td>
-        <form method="post" action="/feeds/{{ f.id }}/delete"
-              onsubmit="return confirm('Удалить источник?')">
-          <button class="danger" type="submit">Удалить</button>
-        </form>
+        <div class="actions">
+          <a href="/feeds/{{ f.id }}/preview"><button type="button">Просмотр</button></a>
+          <form method="post" action="/feeds/{{ f.id }}/delete"
+                onsubmit="return confirm('Удалить источник?')">
+            <button class="danger" type="submit">Удалить</button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
