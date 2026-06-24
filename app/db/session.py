@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.config import get_settings
@@ -16,11 +17,53 @@ engine = create_engine(
 )
 
 
+def _column_default_sql(column) -> str:
+    """Безопасный DEFAULT для ALTER TABLE ADD COLUMN на существующих строках."""
+    try:
+        pytype = column.type.python_type
+    except (NotImplementedError, AttributeError):
+        pytype = str
+    if pytype is str:
+        return "''"
+    if pytype is bool or pytype is int:
+        return "0"
+    if pytype is float:
+        return "0"
+    return "NULL"
+
+
+def _migrate_add_missing_columns() -> None:
+    """Лёгкая авто-миграция: дописать недостающие колонки в существующие таблицы.
+
+    SQLModel.create_all создаёт только отсутствующие таблицы, но не добавляет
+    новые поля в уже существующие. Здесь сравниваем модель с фактической схемой
+    и добавляем недостающие колонки (ALTER TABLE ADD COLUMN). Данные сохраняются.
+    """
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table_name, table in SQLModel.metadata.tables.items():
+            if not insp.has_table(table_name):
+                continue  # новую таблицу создаст create_all
+            existing = {c["name"] for c in insp.get_columns(table_name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                col_type = column.type.compile(dialect=engine.dialect)
+                default = _column_default_sql(column)
+                conn.execute(
+                    text(
+                        f'ALTER TABLE "{table_name}" '
+                        f'ADD COLUMN "{column.name}" {col_type} DEFAULT {default}'
+                    )
+                )
+
+
 def init_db() -> None:
     # импорт моделей нужен, чтобы они зарегистрировались в metadata
     from app.db import models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
+    _migrate_add_missing_columns()
     with Session(engine) as s:
         if s.get(models.AppConfig, 1) is None:
             s.add(models.AppConfig(id=1))
