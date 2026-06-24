@@ -36,6 +36,7 @@
         <span class="muted">Уже обработано ✓</span>
       {% else %}
         <form method="post" action="/process-one">
+          <input type="hidden" name="feed_id" value="{{ feed.id }}">
           <input type="hidden" name="feed_name" value="{{ feed.name }}">
           <input type="hidden" name="title" value="{{ e.title }}">
           <input type="hidden" name="link" value="{{ e.link }}">

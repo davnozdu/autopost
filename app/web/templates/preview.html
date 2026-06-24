@@ -8,10 +8,7 @@
   {% for a in articles %}
   <div class="card">
     <h3 style="margin:0 0 6px">{{ a.title }}</h3>
-    <p class="muted" style="margin:0 0 8px">
-      Источник: {{ a.feed_name }} ·
-      {% if a.source_url %}<a href="{{ a.source_url }}" target="_blank">оригинал</a>{% endif %}
-    </p>
+    <p class="muted" style="margin:0 0 8px">{{ a.feed_name }}</p>
     {% if a.image_url %}<img class="thumb" src="{{ a.image_url }}" alt="">{% endif %}
     <p style="margin:8px 0 12px">{{ a.annotation }}</p>
     <a href="/articles/{{ a.id }}"><button type="button" class="primary">Просмотреть всю статью</button></a>

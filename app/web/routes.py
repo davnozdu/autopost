@@ -9,12 +9,18 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 from starlette.requests import Request
 
-from app.db.models import AppConfig, Article, Feed
+from app.db.models import LANGUAGES, AppConfig, Article, Feed
 from app.db.session import analysis_dir, engine
 from app.llm.client import LLMClient, LLMError
 from app.llm.prompt import build_prompt, parse_article
 from app.scraper.extract import extract_image, extract_text, fetch_html
-from app.scraper.rss import collect_feed, iter_news_dirs, peek_feed, read_news
+from app.scraper.rss import (
+    collect_feed,
+    iter_news_dirs,
+    peek_feed,
+    read_news,
+    slugify,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -78,8 +84,26 @@ def feeds_page(request: Request, msg: str = "") -> HTMLResponse:
     with Session(engine) as s:
         feeds = s.exec(select(Feed).order_by(Feed.id)).all()
     return templates.TemplateResponse(
-        request, "feeds.html", {"feeds": feeds, "msg": msg}
+        request, "feeds.html", {"feeds": feeds, "msg": msg, "languages": LANGUAGES}
     )
+
+
+@router.post("/feeds/{feed_id}/settings")
+def feed_settings(
+    feed_id: int,
+    dest_site: str = Form(""),
+    langs: list[str] = Form(default=[]),
+) -> RedirectResponse:
+    allowed = {code for code, _ in LANGUAGES}
+    selected = [c for c in langs if c in allowed]
+    with Session(engine) as s:
+        feed = s.get(Feed, feed_id)
+        if feed:
+            feed.dest_site = dest_site.strip()
+            feed.languages = ",".join(selected)
+            s.add(feed)
+            s.commit()
+    return _redirect("/", "Настройки источника сохранены")
 
 
 @router.post("/feeds")
@@ -125,6 +149,7 @@ def delete_feed(feed_id: int) -> RedirectResponse:
 # ── Ручная обработка одной новости из предпросмотра ───────────────────
 @router.post("/process-one")
 def process_one(
+    feed_id: int = Form(0),
     feed_name: str = Form(""),
     title: str = Form(""),
     link: str = Form(...),
@@ -137,6 +162,8 @@ def process_one(
         ).first()
         if exists:
             return _redirect(f"/articles/{exists.id}", "Уже обработано")
+
+        feed = s.get(Feed, feed_id) if feed_id else None
 
         # парсинг полной статьи со страницы источника
         text = ""
@@ -164,6 +191,9 @@ def process_one(
             )
         except LLMError as exc:
             return _redirect("/preview", f"Ошибка LLM: {str(exc)[:120]}")
+        if feed:
+            art.dest_site = feed.dest_site
+            art.languages = feed.languages
         s.add(art)
         s.commit()
         s.refresh(art)
@@ -194,6 +224,10 @@ def process() -> RedirectResponse:
     skipped_err = 0
     with Session(engine) as s:
         config = s.get(AppConfig, 1) or AppConfig(id=1)
+        # сопоставление папки-потока (slug) → источник, чтобы взять настройки
+        feed_by_slug = {
+            slugify(f.name): f for f in s.exec(select(Feed)).all()
+        }
         for feed_name, news_dir in iter_news_dirs(adir):
             if created >= PROCESS_LIMIT:
                 break
@@ -215,6 +249,10 @@ def process() -> RedirectResponse:
             except LLMError:
                 skipped_err += 1
                 continue
+            feed = feed_by_slug.get(feed_name)
+            if feed:
+                art.dest_site = feed.dest_site
+                art.languages = feed.languages
             s.add(art)
             s.commit()
             created += 1

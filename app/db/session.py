@@ -58,6 +58,13 @@ def _migrate_add_missing_columns() -> None:
                 )
 
 
+# Прежняя инструкция по умолчанию — заменяем на новую, если пользователь её не менял.
+_OLD_DEFAULT_INSTRUCTIONS = (
+    "Přepiš novinku jako originální SEO článek, neopisuj doslova. "
+    "Zachovej fakta a uveď odkaz na zdroj."
+)
+
+
 def init_db() -> None:
     # импорт моделей нужен, чтобы они зарегистрировались в metadata
     from app.db import models  # noqa: F401
@@ -65,8 +72,13 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_add_missing_columns()
     with Session(engine) as s:
-        if s.get(models.AppConfig, 1) is None:
+        config = s.get(models.AppConfig, 1)
+        if config is None:
             s.add(models.AppConfig(id=1))
+            s.commit()
+        elif config.llm_instructions.strip() == _OLD_DEFAULT_INSTRUCTIONS:
+            config.llm_instructions = models.DEFAULT_LLM_INSTRUCTIONS
+            s.add(config)
             s.commit()
 
 

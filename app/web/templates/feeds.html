@@ -8,7 +8,7 @@
     <form method="post" action="/process"><button type="submit">Обработать через LLM</button></form>
   </div>
   <p class="muted" style="margin-bottom:0">«Собрать» качает RSS в папки анализа (до 10 партий на поток).
-     «Обработать» отдаёт новости модели и складывает результат во вкладку «Превью».</p>
+     «Обработать» отдаёт собранные новости модели. Для ручного режима откройте «Просмотр» у источника.</p>
 </div>
 
 <div class="card">
@@ -22,30 +22,41 @@
   </form>
 </div>
 
-<div class="card">
-  <h2 style="font-size:1.05rem;margin-top:0">Источники</h2>
-  {% if feeds %}
-  <table>
-    <tr><th>Название</th><th>RSS URL</th><th></th></tr>
-    {% for f in feeds %}
-    <tr>
-      <td>{{ f.name }}</td>
-      <td class="muted">{{ f.url }}</td>
-      <td>
-        <div class="actions">
-          <a href="/feeds/{{ f.id }}/preview"><button type="button">Просмотр</button></a>
-          <form method="post" action="/feeds/{{ f.id }}/delete"
-                onsubmit="return confirm('Удалить источник?')">
-            <button class="danger" type="submit">Удалить</button>
-          </form>
-        </div>
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
+<h2 style="font-size:1.05rem">Источники</h2>
+{% if feeds %}
+  {% for f in feeds %}
+  {% set flangs = f.languages.split(',') %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+      <strong>{{ f.name }}</strong>
+      <div class="actions">
+        <a href="/feeds/{{ f.id }}/preview"><button type="button">Просмотр</button></a>
+        <form method="post" action="/feeds/{{ f.id }}/delete"
+              onsubmit="return confirm('Удалить источник?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    </div>
+    <p class="muted" style="margin:4px 0 10px;word-break:break-all">{{ f.url }}</p>
+
+    <form method="post" action="/feeds/{{ f.id }}/settings">
+      <label>Сайт назначения</label>
+      <input type="text" name="dest_site" value="{{ f.dest_site }}" placeholder="напр. stavba.example.cz">
+      <label>Языки перевода для заливки</label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+        {% for code, label in languages %}
+        <label style="display:flex;gap:6px;align-items:center;margin:0">
+          <input type="checkbox" name="langs" value="{{ code }}" style="width:auto"
+                 {% if code in flangs %}checked{% endif %}> {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+      <div style="margin-top:12px"><button class="primary" type="submit">Сохранить настройки</button></div>
+    </form>
+  </div>
+  {% endfor %}
+{% else %}
   <p class="muted">Пока нет источников.</p>
-  {% endif %}
-</div>
+{% endif %}
 
 {% endblock %}

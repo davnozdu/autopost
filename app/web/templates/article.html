@@ -7,9 +7,9 @@
 <article class="card">
   <h1 style="font-size:1.4rem;margin-top:0">{{ a.title }}</h1>
   <p class="muted" style="margin-top:0">
-    Источник: {{ a.feed_name }}
-    {% if a.source_url %} · <a href="{{ a.source_url }}" target="_blank">оригинал</a>{% endif %}
-    · статус: {{ a.status }}
+    {{ a.feed_name }} · статус: {{ a.status }}
+    {% if a.dest_site %} · сайт: {{ a.dest_site }}{% endif %}
+    {% if a.languages %} · переводы: {{ a.languages.upper() }}{% endif %}
   </p>
   {% if a.image_url %}<img src="{{ a.image_url }}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0"><p class="muted" style="font-size:.8rem">{{ a.image_url }}</p>{% endif %}
 
