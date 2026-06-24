@@ -20,7 +20,8 @@ def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
         rules.append(config.llm_instructions.strip())
     rules.append(
         'Vrať POUZE validní JSON bez dalšího textu ve tvaru: '
-        '{"title": "...", "body": "...", "image_url": "..."}.'
+        '{"title": "...", "annotation": "...", "body": "...", "image_url": "..."}. '
+        'Pole "annotation" je krátké shrnutí (1–2 věty) pro náhled.'
     )
 
     system = "Jsi profesionální autor SEO článků. " + " ".join(rules)
@@ -36,14 +37,19 @@ def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
 def parse_article(raw: str, fallback_image: str | None = None) -> dict:
     data = _extract_json(raw)
     if not data:
+        body = raw.strip()
         return {
             "title": "(bez názvu)",
-            "body": raw.strip(),
+            "annotation": body[:300],
+            "body": body,
             "image_url": fallback_image,
         }
+    body = data.get("body") or ""
+    annotation = data.get("annotation") or body[:300]
     return {
         "title": data.get("title") or "(bez názvu)",
-        "body": data.get("body") or "",
+        "annotation": annotation,
+        "body": body,
         "image_url": data.get("image_url") or fallback_image,
     }
 

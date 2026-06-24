@@ -50,7 +50,7 @@ uvicorn app.main:app --reload --port 8080
 
 | LLM_PROVIDER | base_url по умолчанию | модель по умолчанию |
 |--------------|-----------------------|---------------------|
-| `deepseek`   | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| `deepseek`   | `https://api.deepseek.com/v1` | `deepseek-v4-flash` (или `deepseek-v4-pro`) |
 | `hermes`     | — (задайте `LLM_BASE_URL`) | `hermes` |
 | `openai`     | `https://api.openai.com/v1` | `gpt-4o-mini` |
 | `claude`     | `https://api.anthropic.com/v1` | `claude-sonnet-4-6` |

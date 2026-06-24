@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ a.title }}{% endblock %}
+{% block content %}
+
+<p><a href="/preview">← К превью</a></p>
+
+<article class="card">
+  <h1 style="font-size:1.4rem;margin-top:0">{{ a.title }}</h1>
+  <p class="muted" style="margin-top:0">
+    Источник: {{ a.feed_name }}
+    {% if a.source_url %} · <a href="{{ a.source_url }}" target="_blank">оригинал</a>{% endif %}
+    · статус: {{ a.status }}
+  </p>
+  {% if a.image_url %}<img src="{{ a.image_url }}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0"><p class="muted" style="font-size:.8rem">{{ a.image_url }}</p>{% endif %}
+
+  <div style="white-space:pre-wrap;line-height:1.55">{{ a.body }}</div>
+
+  {% if a.publish_note %}
+    <p class="muted" style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">{{ a.publish_note }}</p>
+  {% endif %}
+</article>
+
+<div class="actions" style="margin-top:8px">
+  <form method="post" action="/articles/{{ a.id }}/publish">
+    <button class="primary" type="submit">Опубликовать</button>
+  </form>
+  <form method="post" action="/articles/{{ a.id }}/delete"
+        onsubmit="return confirm('Удалить статью безвозвратно?')">
+    <button class="danger" type="submit">Удалить</button>
+  </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,27 @@
+# Самодостаточный compose для QNAP Container Station — все переменные внутри,
+# без внешнего .env. Замените значения LLM_KEY и SECRET_KEY на свои.
+#
+# Перед запуском создайте папки на NAS:
+#   mkdir -p /share/CACHEDEV3_DATA/autopost/data /share/CACHEDEV3_DATA/autopost/site
+#
+# Откроется на http://<адрес-NAS>:8778 — при первом входе задайте пароль.
+
+services:
+  autopost:
+    image: ghcr.io/davnozdu/autopost:latest
+    container_name: autopost
+    restart: unless-stopped
+    ports:
+      - "8778:8080"
+    environment:
+      # --- LLM ---
+      LLM_PROVIDER: "deepseek"          # deepseek | hermes | openai | claude | local
+      LLM_KEY: "ВАШ_API_КЛЮЧ"
+      LLM_MODEL: ""                     # пусто → модель по умолчанию провайдера
+      LLM_BASE_URL: ""                  # для hermes/local обязательно, напр. http://192.168.1.10:8642/v1
+      # --- Сессии ---
+      SECRET_KEY: "ЗАМЕНИТЕ_НА_ДЛИННУЮ_СЛУЧАЙНУЮ_СТРОКУ"
+      DATA_DIR: "data"
+    volumes:
+      - /share/CACHEDEV3_DATA/autopost/data:/app/data
+      - /share/CACHEDEV3_DATA/autopost/site:/app/templates_sites

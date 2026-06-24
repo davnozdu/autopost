@@ -13,19 +13,12 @@
       {% if a.source_url %}<a href="{{ a.source_url }}" target="_blank">оригинал</a>{% endif %}
     </p>
     {% if a.image_url %}<img class="thumb" src="{{ a.image_url }}" alt="">{% endif %}
-    <p style="white-space:pre-wrap">{{ a.body[:600] }}{% if a.body|length > 600 %}…{% endif %}</p>
-    <div class="actions">
-      <form method="post" action="/articles/{{ a.id }}/approve">
-        <button class="primary" type="submit">Одобрить</button>
-      </form>
-      <form method="post" action="/articles/{{ a.id }}/reject">
-        <button class="danger" type="submit">Отклонить</button>
-      </form>
-    </div>
+    <p style="margin:8px 0 12px">{{ a.annotation }}</p>
+    <a href="/articles/{{ a.id }}"><button type="button" class="primary">Просмотреть всю статью</button></a>
   </div>
   {% endfor %}
 {% else %}
-  <p class="muted">Нет подготовленных новостей. Соберите и обработайте источники на вкладке «Источники».</p>
+  <p class="muted">Нет подготовленных новостей. Откройте источник → «Просмотр» → «Обработать» нужную новость.</p>
 {% endif %}
 
 {% endblock %}

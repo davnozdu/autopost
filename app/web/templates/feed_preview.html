@@ -31,6 +31,20 @@
     {% if e.published %}<p class="muted" style="margin:0 0 6px;font-size:.85rem">{{ e.published }}</p>{% endif %}
     {% if e.image %}<img class="thumb" src="{{ e.image }}" alt="">{% endif %}
     {% if e.summary %}<p style="margin:6px 0 0">{{ e.summary }}{% if e.summary|length >= 300 %}…{% endif %}</p>{% endif %}
+    <div class="actions" style="margin-top:10px">
+      {% if e.processed %}
+        <span class="muted">Уже обработано ✓</span>
+      {% else %}
+        <form method="post" action="/process-one">
+          <input type="hidden" name="feed_name" value="{{ feed.name }}">
+          <input type="hidden" name="title" value="{{ e.title }}">
+          <input type="hidden" name="link" value="{{ e.link }}">
+          <input type="hidden" name="image" value="{{ e.image or '' }}">
+          <input type="hidden" name="summary" value="{{ e.summary }}">
+          <button class="primary" type="submit">Обработать</button>
+        </form>
+      {% endif %}
+    </div>
   </div>
   {% endfor %}
 {% endif %}

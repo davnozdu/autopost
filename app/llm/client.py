@@ -36,10 +36,11 @@ class LLMClient:
         *,
         json_mode: bool = False,
         temperature: float = 0.7,
+        model: str | None = None,
     ) -> LLMResult:
         provider = self.settings.llm_provider
         base_url = self.settings.resolved_base_url()
-        model = self.settings.resolved_model()
+        model = model or self.settings.resolved_model()
 
         payload: dict = {
             "model": model,

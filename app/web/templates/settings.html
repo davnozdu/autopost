@@ -11,6 +11,14 @@
     <label>Символов на новость (примерно)</label>
     <input type="number" name="chars_per_news" value="{{ config.chars_per_news }}" min="100" step="100">
 
+    <label>Модель DeepSeek</label>
+    <select name="llm_model" style="width:100%;padding:8px;border:1px solid #e2e2e2;border-radius:8px">
+      <option value="" {% if not config.llm_model %}selected{% endif %}>По умолчанию (deepseek-v4-flash)</option>
+      {% for value, label in models %}
+      <option value="{{ value }}" {% if config.llm_model == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+
     <label style="display:flex;gap:8px;align-items:center;margin-top:14px">
       <input type="checkbox" name="images_from_source_only" value="true"
              style="width:auto" {% if config.images_from_source_only %}checked{% endif %}>

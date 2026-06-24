@@ -27,10 +27,11 @@ PRESETS: dict[str, ProviderPreset] = {
         supports_json_mode=False,
     ),
     # DeepSeek — облачный API, по умолчанию основной провайдер.
+    # Актуальные модели: deepseek-v4-flash (быстрая) и deepseek-v4-pro (мощнее).
     "deepseek": ProviderPreset(
         name="deepseek",
         base_url="https://api.deepseek.com/v1",
-        default_model="deepseek-chat",
+        default_model="deepseek-v4-flash",
         supports_json_mode=True,
     ),
     "openai": ProviderPreset(
