@@ -24,6 +24,8 @@ services:
       DATA_DIR: "data"
       # Таймзона планировщика (дни/время сбора и публикации)
       TZ: "Europe/Prague"
+      # Ключ HTTP API (/api/*) для автоматизаций; пусто → API выключен
+      API_KEY: "ЗАМЕНИТЕ_НА_ДЛИННЫЙ_СЛУЧАЙНЫЙ_КЛЮЧ"
     volumes:
       - /share/CACHEDEV3_DATA/autopost/data:/app/data
       - /share/CACHEDEV3_DATA/autopost/site:/app/templates_sites

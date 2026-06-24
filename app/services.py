@@ -16,6 +16,7 @@ from app.llm.client import LLMClient, LLMError
 from app.llm.prompt import build_prompt, parse_article
 from app.scraper.extract import extract_image, extract_text, fetch_html
 from app.scraper.rss import peek_feed
+from app.util import lang_segment, slugify_latin
 
 MAX_PER_COLLECT = 10  # лимит статей за один прогон сбора (защита от лавины/затрат)
 
@@ -77,6 +78,7 @@ def generate_article(
         system, user, json_mode=True, temperature=0.7, model=(config.llm_model or None)
     )
     art = parse_article(result.text, fallback_image=image)
+    slug = slugify_latin(art["slug"]) or slugify_latin(art["title"]) or "article"
     return Article(
         site_id=site.id,
         site_name=site.name,
@@ -84,8 +86,13 @@ def generate_article(
         source_url=link,
         image_url=art["image_url"],
         title=art["title"],
+        slug=slug,
         annotation=art["annotation"],
-        body=art["body"],
+        meta_description=art["meta_description"],
+        keywords=art["keywords"],
+        tag=art["tag"],
+        body=art["body_html"],
+        lang=lang_segment(config.language),
         languages=site.languages,
         status="draft",
     )

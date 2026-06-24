@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -117,8 +117,8 @@ def save_site(
     name: str = Form(...),
     repo: str = Form(""),
     branch: str = Form("main"),
-    articles_path: str = Form(""),
-    template_ref: str = Form(""),
+    github_token: str = Form(""),
+    path_pattern: str = Form("{lang}/blog/{slug}"),
     langs: list[str] = Form(default=[]),
     collect_days: list[str] = Form(default=[]),
     collect_time: str = Form("09:00"),
@@ -136,8 +136,9 @@ def save_site(
         site.name = name.strip()
         site.repo = repo.strip()
         site.branch = branch.strip() or "main"
-        site.articles_path = articles_path.strip()
-        site.template_ref = template_ref.strip()
+        if github_token.strip():
+            site.github_token = github_token.strip()
+        site.path_pattern = path_pattern.strip() or "{lang}/blog/{slug}"
         site.languages = ",".join(c for c in langs if c in allowed_l)
         site.collect_days = ",".join(c for c in collect_days if c in allowed_d)
         site.collect_time = collect_time.strip() or "09:00"
@@ -149,6 +150,30 @@ def save_site(
         s.commit()
     scheduler.reload_jobs()
     return _redirect(f"/sites/{site_id}", "Настройки сайта сохранены")
+
+
+@router.post("/sites/{site_id}/template")
+async def upload_template(
+    site_id: int,
+    template_file: UploadFile | None = File(default=None),
+    template_text: str = Form(""),
+) -> RedirectResponse:
+    content = ""
+    if template_file is not None and template_file.filename:
+        raw = await template_file.read()
+        content = raw.decode("utf-8", errors="replace")
+    elif template_text.strip():
+        content = template_text
+    else:
+        return _redirect(f"/sites/{site_id}", "Не передан файл или текст шаблона")
+    with Session(engine) as s:
+        site = s.get(Site, site_id)
+        if not site:
+            return _redirect("/", "Сайт не найден")
+        site.template = content
+        s.add(site)
+        s.commit()
+    return _redirect(f"/sites/{site_id}", "Шаблон сохранён")
 
 
 @router.post("/sites/{site_id}/delete")

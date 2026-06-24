@@ -30,11 +30,11 @@
     <div style="display:flex;gap:12px">
       <div style="flex:1"><label>Ветка</label>
         <input type="text" name="branch" value="{{ site.branch }}"></div>
-      <div style="flex:2"><label>Путь к статьям</label>
-        <input type="text" name="articles_path" value="{{ site.articles_path }}" placeholder="content/articles"></div>
+      <div style="flex:2"><label>Путь публикации</label>
+        <input type="text" name="path_pattern" value="{{ site.path_pattern }}" placeholder="{lang}/blog/{slug}"></div>
     </div>
-    <label>Шаблон файла статьи</label>
-    <input type="text" name="template_ref" value="{{ site.template_ref }}" placeholder="имя/путь шаблона">
+    <label>GitHub-токен (contents:write){% if site.github_token %} — задан ✓{% endif %}</label>
+    <input type="password" name="github_token" value="" placeholder="{% if site.github_token %}оставьте пустым, чтобы не менять{% else %}ghp_…{% endif %}">
 
     <label>Языки перевода</label>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
@@ -79,6 +79,21 @@
     </label>
 
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="font-size:1.05rem;margin-top:0">Шаблон статьи</h3>
+  <p class="muted" style="margin-top:0">
+    Загрузите файл шаблона (Jinja2, .j2/.html) для этого сайта — по нему генератор
+    собирает страницу статьи. {% if site.template %}<strong>Шаблон загружен ✓</strong> ({{ site.template|length }} символов).{% else %}<strong>Шаблон не загружен.</strong>{% endif %}
+  </p>
+  <form method="post" action="/sites/{{ site.id }}/template" enctype="multipart/form-data">
+    <label>Файл шаблона</label>
+    <input type="file" name="template_file" accept=".j2,.html,.htm,.txt">
+    <label style="margin-top:10px">…или вставьте/отредактируйте текст шаблона</label>
+    <textarea name="template_text" style="min-height:200px;font-family:var(--f-mono);font-size:12px">{{ site.template }}</textarea>
+    <div style="margin-top:12px"><button class="primary" type="submit">Сохранить шаблон</button></div>
   </form>
 </div>
 

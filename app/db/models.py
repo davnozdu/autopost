@@ -53,8 +53,11 @@ class Site(SQLModel, table=True):
     # Публикация
     repo: str = ""           # owner/name
     branch: str = "main"
-    articles_path: str = ""  # путь в репозитории, напр. content/articles
-    template_ref: str = ""   # имя/путь файла-шаблона
+    github_token: str = ""   # PAT с правом contents:write на репозиторий сайта
+    # Шаблон статьи (Jinja2) — ЗАГРУЖАЕТСЯ через админку. По нему рендерится статья.
+    template: str = ""
+    # Базовый путь публикации; {lang}/{slug} подставляются. Пусто → "{lang}/blog/{slug}".
+    path_pattern: str = "{lang}/blog/{slug}"
     # Языки перевода через запятую, напр. "ru,en,cz"
     languages: str = ""
     # Расписание: дни через запятую (mon,fri) + время HH:MM
@@ -114,8 +117,13 @@ class Article(SQLModel, table=True):
     source_path: str = ""
     image_url: str | None = None
     title: str = ""
+    slug: str = ""
     annotation: str = ""
-    body: str = ""
+    meta_description: str = ""
+    keywords: str = ""   # через запятую
+    tag: str = ""
+    body: str = ""       # body_html от LLM
+    lang: str = "cs"     # язык статьи (на каком написана)
     languages: str = ""  # снимок языков сайта на момент обработки
     status: str = "draft"  # draft | scheduled | published | failed
     publish_at: datetime | None = None

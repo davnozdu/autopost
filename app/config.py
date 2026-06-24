@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     data_dir: str = "data"
     # Таймзона планировщика (env TZ). От неё зависят дни/время сбора и публикации.
     tz: str = "Europe/Prague"
+    # Ключ для HTTP API (/api/*). Пусто → API выключен (401). Bearer-токен.
+    api_key: str = ""
 
     def resolved_base_url(self) -> str:
         preset = get_preset(self.llm_provider)

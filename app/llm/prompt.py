@@ -1,9 +1,15 @@
-"""Сборка промпта для написания статьи и разбор JSON-ответа модели."""
+"""Сборка промпта для написания статьи и разбор JSON-ответа модели.
+
+DeepSeek возвращает СТРОГИЙ JSON с контентом. HTML-обвязку (SEO, бэклинк,
+JSON-LD) собирает Python-шаблонизатор — модель разметку не трогает.
+"""
 
 import json
 import re
 
 from app.db.models import AppConfig
+
+ALLOWED_TAGS = "p, h2, h3, ul, ol, li, strong, em, a"
 
 
 def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
@@ -14,14 +20,23 @@ def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
     if config.images_from_source_only:
         rules.append(
             "Jako obrázek použij VÝHRADNĚ URL ze zdroje (pole 'Obrázek ze zdroje'). "
-            "Negeneruj, neměň ani nevymýšlej URL obrázku; pokud chybí, vrať prázdný řetězec."
+            "Negeneruj a neměň URL; pokud chybí, vrať prázdný řetězec."
         )
     if config.llm_instructions.strip():
         rules.append(config.llm_instructions.strip())
+
     rules.append(
-        'Vrať POUZE validní JSON bez dalšího textu ve tvaru: '
-        '{"title": "...", "annotation": "...", "body": "...", "image_url": "..."}. '
-        'Pole "annotation" je krátké shrnutí (1–2 věty) pro náhled.'
+        "Vrať POUZE validní JSON bez dalšího textu, přesně v tomto tvaru:\n"
+        '{"title": "...", "slug": "...", "annotation": "...", '
+        '"meta_description": "...", "keywords": ["...", "..."], '
+        '"tag": "...", "body_html": "...", "image_url": "..."}\n'
+        "Pravidla polí:\n"
+        "- slug: krátký, latinkou, malá písmena, slova oddělená pomlčkou (a-z 0-9 -);\n"
+        f"- body_html: HTML těla článku pouze s tagy {ALLOWED_TAGS}; bez <html>/<head>/<h1>; "
+        "podnadpisy h2/h3, odstavce p;\n"
+        "- annotation: 1–2 věty pro náhled; meta_description: do 160 znaků;\n"
+        "- keywords: 4–8 klíčových slov; tag: jedno krátké označení rubriky;\n"
+        "- NEzmiňuj zdroj a nevkládej odkaz na zdroj do body_html."
     )
 
     system = "Jsi profesionální autor SEO článků. " + " ".join(rules)
@@ -35,23 +50,33 @@ def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
 
 
 def parse_article(raw: str, fallback_image: str | None = None) -> dict:
-    data = _extract_json(raw)
-    if not data:
-        body = raw.strip()
-        return {
-            "title": "(bez názvu)",
-            "annotation": body[:300],
-            "body": body,
-            "image_url": fallback_image,
-        }
-    body = data.get("body") or ""
-    annotation = data.get("annotation") or body[:300]
+    data = _extract_json(raw) or {}
+    body = (data.get("body_html") or data.get("body") or "").strip()
+    if not body and not data:
+        body = (raw or "").strip()
+    title = data.get("title") or "(bez názvu)"
+    kw = data.get("keywords")
+    if isinstance(kw, list):
+        keywords = ", ".join(str(k).strip() for k in kw if str(k).strip())
+    else:
+        keywords = (kw or "").strip()
+    annotation = data.get("annotation") or _text_excerpt(body, 300)
     return {
-        "title": data.get("title") or "(bez názvu)",
+        "title": title,
+        "slug": (data.get("slug") or "").strip(),
         "annotation": annotation,
-        "body": body,
+        "meta_description": (data.get("meta_description") or annotation)[:200],
+        "keywords": keywords,
+        "tag": (data.get("tag") or "").strip(),
+        "body_html": body,
         "image_url": data.get("image_url") or fallback_image,
     }
+
+
+def _text_excerpt(html: str, n: int) -> str:
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:n]
 
 
 def _extract_json(raw: str) -> dict | None:

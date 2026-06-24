@@ -139,9 +139,38 @@ volumes:
 Глобальные настройки модели — вкладка «Настройки»: язык, символов на новость,
 «картинки строго из источника», **модель DeepSeek** (Flash/Pro), инструкция для LLM.
 
-> **Публикация (заливка в GitHub + соцсети) пока заглушка** — статьи доходят до
-> «Запланировано», но реальная заливка включится после готовности модуля публикации
-> (нужен пример файла статьи на сайте и токены).
+## 5a. Публикация на сайт
+
+Для каждого сайта (страница сайта в админке):
+1. **GitHub-репозиторий** (`owner/name`), **ветка**, **путь публикации**
+   (по умолчанию `{lang}/blog/{slug}`).
+2. **GitHub-токен** (PAT с правом `contents:write`) — для push в репозиторий.
+3. **Шаблон статьи** — загрузите файл (Jinja2, `.j2/.html`) в разделе «Шаблон статьи»
+   (или вставьте текст). По нему генератор собирает HTML каждой статьи.
+
+При публикации генератор рендерит статью по шаблону и кладёт в репозиторий
+`{path}/index.html` + `{path}/meta.json` (через GitHub API). Дальше GitHub Action
+сайта заливает по FTP. Листинг/пагинацию/RSS строит PHP на сайте из этих файлов.
+
+## 6a. HTTP API (для автоматизаций)
+
+Включается переменной `API_KEY`. Запросы — с заголовком
+`Authorization: Bearer <API_KEY>`. Базовый адрес — `http://<хост>:8778/api`.
+
+Примеры:
+```bash
+curl -H "Authorization: Bearer $API_KEY" http://HOST:8778/api/status
+curl -H "Authorization: Bearer $API_KEY" -H 'Content-Type: application/json' \
+     -d '{"name":"mysite"}' http://HOST:8778/api/sites
+curl -X POST -H "Authorization: Bearer $API_KEY" http://HOST:8778/api/sites/1/collect
+curl -H "Authorization: Bearer $API_KEY" "http://HOST:8778/api/articles?site_id=1&status=scheduled"
+curl -X POST -H "Authorization: Bearer $API_KEY" http://HOST:8778/api/articles/5/publish
+```
+Эндпоинты: `GET /api/status`, `GET/POST /api/sites`, `GET /api/sites/{id}`,
+`POST /api/sites/{id}/sources`, `POST /api/sites/{id}/collect`,
+`POST /api/sites/{id}/publish`, `GET /api/articles`, `GET /api/articles/{id}`,
+`POST /api/articles/{id}/publish`, `POST /api/llm/test`. Управление возможно
+и через админку, и через API — они работают над одними данными.
 
 ---
 
@@ -156,6 +185,7 @@ volumes:
 | `SECRET_KEY` | Подпись cookie-сессий (длинная случайная строка) | `…` |
 | `DATA_DIR` | Каталог данных | `data` |
 | `TZ` | Таймзона планировщика (дни/время сбора и публикации) | `Europe/Prague` |
+| `API_KEY` | Ключ HTTP API (`/api/*`); пусто → API выключен | `длинная-случайная-строка` |
 
 Проверить связь с моделью: после входа — `POST /api/llm/test`
 (или кнопкой, когда добавим её в UI).
