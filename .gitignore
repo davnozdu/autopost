@@ -1,0 +1,15 @@
+# Secrets / runtime
+.env
+data/*
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Tooling / local
+.claude/
+.DS_Store

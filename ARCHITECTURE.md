@@ -1,0 +1,352 @@
+# Архитектура: автопостинг статей (Docker + WEB-админка + LLM/DeepSeek)
+
+> Детальный план архитектуры. Кода здесь нет — это документ для согласования
+> до начала реализации. Базируется на `idea.md` с учётом уточнений.
+
+---
+
+## 1. Ключевое уточнение и роли
+
+В исходном черновике Hermes выступал как «всё в одном» (LLM + Telegram +
+git + соцсети). От этой роли-прослойки мы отказываемся, но **Hermes остаётся
+поддерживаемым провайдером LLM наравне с DeepSeek** — оба вызываются напрямую
+по API. По факту:
+
+- **LLM** = модель, вызываемая по OpenAI-совместимому API
+  `POST /v1/chat/completions`. Поддерживаются пресеты `hermes`, `deepseek`
+  (по умолчанию, `https://api.deepseek.com/v1`, `deepseek-chat`), `openai`,
+  `claude`, `local`. Задача модели — **только генерация текста**: принять
+  материалы + инструкции, вернуть статью. Клиент **провайдер-независимый**
+  (base URL + ключ + имя модели — настройки), переключение между Hermes и
+  DeepSeek (и остальными) без переписывания кода. Можно задавать провайдера/
+  модель **на каждый сайт**.
+- **Наш Docker-образ** (рабочее имя — `autopost`) = вся оркестрация:
+  расписание, сбор новостей, вызов LLM, WEB-админка, Telegram-бот,
+  подготовка файла по шаблону, push в GitHub, кросс-постинг в соцсети.
+
+Таким образом проект — это **один наш сервис** (+ внешний LLM-API, + внешний
+GitHub-репозиторий сайта). Никакого Hermes-контейнера разворачивать не нужно.
+
+---
+
+## 2. Высокоуровневая схема
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │         НАШ КОНТЕЙНЕР  (autopost)             │
+                    │                                               │
+  Расписание ──────►│  [Scheduler]  каждые N дней / по кнопке       │
+  (APScheduler)     │       │                                       │
+                    │       ▼                                       │
+                    │  [Scraper] ── RSS/HTML источники ── чистый     │
+                    │       │        текст новостей                 │
+                    │       ▼                                       │
+   DeepSeek API ◄───┼─ [LLM Client] POST /v1/chat/completions       │
+   (по умолч.) ─────┼─► структурированный JSON статьи               │
+                    │       │                                       │
+                    │       ▼                                       │
+                    │  [DB] черновик в статусе PENDING_REVIEW        │
+                    │       │                                       │
+                    │       ├──► [Telegram Bot]  «да / нет / правки» │
+                    │       └──► [WEB-админка]   просмотр/редактор   │
+                    │                  │                            │
+                    │            APPROVED                           │
+                    │                  ▼                            │
+                    │  [Publisher]                                  │
+                    │   ├─ шаблон + статья → готовый файл            │
+                    │   ├─ GitHub API: commit + push  ──────────────┼─► GitHub repo
+                    │   ├─ X/Twitter API  ──────────────────────────┼─► X        (→ GH Action → FTP → хостинг)
+                    │   └─ Instagram (instagrapi) ──────────────────┼─► Instagram
+                    └─────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Технологический стек (рекомендация)
+
+| Слой | Выбор | Почему |
+|------|-------|--------|
+| Язык | Python 3.12 | Уже в черновике, богатые библиотеки парсинга/соцсетей |
+| Web-фреймворк | **FastAPI** | Async, отдаёт и API, и админку, легко документируется |
+| Админка (UI) | **Jinja2 + HTMX** (server-rendered) | Один контейнер, без отдельной сборки SPA; достаточно для админки |
+| БД | **SQLite** (файл на volume) | Один пользователь/низкая нагрузка; ноль инфраструктуры. Миграция на Postgres при необходимости |
+| Планировщик | **APScheduler** | В одном процессе с web, cron-выражения, ручной запуск |
+| LLM-клиент | `openai` SDK / `requests` (OpenAI-совместимо) | DeepSeek по умолчанию; провайдер меняется конфигом |
+| Парсинг | `feedparser`, `requests`, `beautifulsoup4`, `lxml`, `trafilatura` | RSS + извлечение чистого текста статьи |
+| Telegram | `python-telegram-bot` (v21+) | Кнопки (inline), обработка ответов/правок |
+| Соцсети | X API v2 (`requests`/`tweepy`), `instagrapi` | Постинг в X и Instagram |
+| Git/публикация | **GitHub REST API (Contents)** через `requests`/PyGithub | Push файла без локального клона репо |
+| Секреты | `.env` + шифрование в БД (`cryptography`) | Часть из env, часть вводится в админке |
+
+Всё работает в **одном процессе/одном образе**: FastAPI (web+API), APScheduler
+(фон), Telegram-бот (фоновый таск в том же event loop, режим polling).
+
+---
+
+## 4. Структура репозитория
+
+```
+autopost/
+├── app/
+│   ├── main.py                 # FastAPI: сборка приложения, запуск бота и планировщика
+│   ├── config.py               # настройки из env
+│   ├── db/
+│   │   ├── models.py           # ORM-модели (SQLModel/SQLAlchemy)
+│   │   └── session.py
+│   ├── scraper/
+│   │   ├── rss.py              # парсинг RSS
+│   │   ├── html.py             # парсинг HTML по CSS-селекторам
+│   │   └── extract.py          # извлечение чистого текста (trafilatura)
+│   ├── llm/
+│   │   ├── client.py           # провайдер-независимый вызов /v1/chat/completions
+│   │   ├── providers.py        # пресеты: deepseek (по умолч.), claude, openai, local
+│   │   └── prompt.py           # сборка system/user промпта, парсинг JSON-ответа
+│   ├── publisher/
+│   │   ├── template.py         # рендер статьи в универсальный шаблон
+│   │   ├── github.py           # commit + push через GitHub API
+│   │   ├── x.py                # постинг в X/Twitter
+│   │   └── instagram.py        # постинг в Instagram
+│   ├── telegram/
+│   │   └── bot.py              # уведомления + обработка да/нет/правок
+│   ├── web/
+│   │   ├── routes.py           # эндпоинты админки
+│   │   └── templates/          # Jinja2-шаблоны админки
+│   └── scheduler.py            # регистрация задач APScheduler
+├── data/                       # volume: sqlite + сессии instagrapi + last-run маркеры
+├── templates_sites/            # универсальные шаблоны сайтов (article.html/.md)
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example
+└── .github/workflows/
+    └── build-image.yml         # сборка и публикация образа в GHCR
+```
+
+---
+
+## 5. Модель данных
+
+**`sites`** — целевые сайты, куда публикуем:
+- `id`, `name`, `theme` (тема для промпта, напр. «stavba a rekonstrukce»), `language` (cs)
+- GitHub: `repo` (owner/name), `branch`, `articles_path` (напр. `content/articles/`),
+  `template_name` (файл из `templates_sites/`), `filename_pattern` (напр. `{date}-{slug}.html`)
+- соцсети: `x_enabled`, `instagram_enabled` (+ ссылки на учётки/ключи)
+- LLM (опционально, переопределяет глобальные): `llm_provider`, `llm_model`
+  (напр. `deepseek` / `deepseek-chat`)
+- `schedule_cron` (напр. `0 9 */3 * *`), `enabled`
+
+**`sources`** — источники новостей (привязаны к сайту):
+- `id`, `site_id`, `type` (`rss` | `html`), `url`
+- для `html`: `list_selector`, `link_selector`, `title_selector`
+- `max_items` (сколько брать за прогон), `enabled`
+
+**`articles`** — черновики/статьи:
+- `id`, `site_id`, `title`, `slug`, `meta_description`, `tags`
+- `body` (HTML или Markdown — зависит от шаблона сайта)
+- `status` (см. §6), `source_links` (JSON со ссылками на исходные новости)
+- `llm_raw` (сырой ответ модели — для отладки), `llm_provider`, `llm_model`
+- `tg_message_id`, `error`
+- `created_at`, `approved_at`, `published_at`
+- `published_urls` (JSON: github_commit_url, x_url, instagram_url)
+
+**`runs`** — журнал прогонов планировщика: `id`, `site_id`, `started_at`,
+`finished_at`, `items_scraped`, `status`, `log`.
+
+**`seen_items`** — антидубли: `source_id`, `item_hash`/`link`, `seen_at`.
+
+**`settings`** — глобальные ключи (зашифрованные секреты, если вводятся в админке).
+
+---
+
+## 6. Жизненный цикл статьи
+
+```
+NEW ─► GENERATING ─► PENDING_REVIEW ─┬─► APPROVED ─► PUBLISHING ─┬─► PUBLISHED
+                          ▲          │                          └─► PUBLISH_FAILED
+                          │          ├─► REJECTED
+                          └──────────┴─► EDITING (правки → новый вызов LLM)
+```
+
+- **NEW** — новости собраны и сгруппированы по сайту.
+- **GENERATING** — отправлены в LLM (DeepSeek), ждём ответ.
+- **PENDING_REVIEW** — статья получена, ушло уведомление в Telegram + видна в админке.
+- **EDITING** — пользователь прислал правки → повторный вызов LLM с правкой.
+- **APPROVED** — нажато «Опубликовать» (в TG или админке).
+- **PUBLISHING** → **PUBLISHED / PUBLISH_FAILED** — публикация и кросс-постинг.
+- **REJECTED** — отклонено.
+
+---
+
+## 7. Модули детально
+
+### 7.1 Scheduler
+- APScheduler с cron-выражением **на каждый сайт** (`sites.schedule_cron`).
+- Кнопка «Запустить сейчас» в админке для ручного прогона.
+- Один прогон = pipeline для одного сайта: scrape → dedup → LLM → черновик.
+
+### 7.2 Scraper
+- Для `rss`: `feedparser`, берём `max_items` свежих записей.
+- Для `html`: `requests` + BeautifulSoup по селекторам из `sources`.
+- Дедуп через `seen_items` (по ссылке/хэшу) — не берём то, что уже обрабатывали.
+- Извлечение **чистого текста** статьи (`trafilatura`/Readability), а не только summary,
+  чтобы у модели был материал, а не заголовки.
+
+### 7.3 LLM Client — формат обмена (по умолчанию DeepSeek)
+**Запрос** (OpenAI-совместимый — одинаков для DeepSeek/OpenAI/Claude-совм. шлюзов):
+```
+POST {LLM_BASE_URL}/v1/chat/completions      # DeepSeek: https://api.deepseek.com
+Authorization: Bearer {LLM_KEY}
+{
+  "model": "deepseek-chat",                  # или deepseek-reasoner / другой провайдер
+  "messages": [
+    {"role": "system", "content": "<инструкция: язык(cs), тон, SEO, длина, формат ответа>"},
+    {"role": "user", "content": "<тема сайта + собранные новости с текстом и ссылками>"}
+  ],
+  "response_format": { "type": "json_object" }   # DeepSeek поддерживает JSON-режим
+}
+```
+Провайдер выбирается через `providers.py` (пресеты base URL + имя модели); ключ
+и выбор провайдера/модели — из настроек (глобально или на сайт).
+
+**Важное проектное решение:** просим модель вернуть **строгий JSON**, чтобы
+надёжно вставлять в шаблон:
+```json
+{
+  "title": "...",
+  "slug": "...",
+  "meta_description": "...",
+  "tags": ["...", "..."],
+  "body_html": "<p>...</p>",
+  "social": { "x": "коротко + хэштеги", "instagram": "подпись" }
+}
+```
+Парсим JSON, при ошибке — повтор/в статус ошибки. `body` формат (HTML vs Markdown)
+выбирается под шаблон сайта. У DeepSeek `response_format: json_object` повышает
+надёжность; на провайдерах без него — fallback на извлечение JSON из текста.
+
+### 7.4 WEB-админка
+Страницы:
+- **Сайты** — CRUD: тема, GitHub repo/branch/path, шаблон, расписание, соцсети.
+- **Источники** — CRUD по каждому сайту, тест парсинга («показать, что соберётся»).
+- **Очередь статей** — список с фильтром по статусу.
+- **Редактор статьи** — просмотр + правка title/slug/meta/body, кнопки
+  «Опубликовать» / «Отклонить» / «Переписать с правками» (→ LLM).
+- **Журнал прогонов / логи**.
+- **Настройки** — LLM (провайдер/base URL/ключ/модель, дефолт DeepSeek),
+  Telegram, ключи соцсетей (шифруются).
+Доступ: простая аутентификация (логин/пароль или токен) — админка не публичная.
+
+### 7.5 Telegram-бот
+- При `PENDING_REVIEW` шлёт: заголовок + краткое содержание + ссылку на статью
+  в админке + inline-кнопки **[✅ Опубликовать] [✏️ Правки] [❌ Отклонить]**.
+- «Опубликовать» → статус APPROVED → запуск Publisher.
+- «Правки» → бот ждёт текст правки → повторный вызов LLM (EDITING) → новое уведомление.
+- «Отклонить» → REJECTED.
+- После публикации шлёт «✅ Опубликовано» + ссылки (сайт/X/Instagram).
+- Режим **polling** (проще, не нужен публичный webhook).
+
+### 7.6 Publisher
+1. **Шаблонизация.** Берём `templates_sites/<template_name>` — универсальный
+   шаблон с плейсхолдерами (`{{title}}`, `{{date}}`, `{{meta_description}}`,
+   `{{tags}}`, `{{content}}`). Вставляем разметку статьи → готовый файл.
+   Имя файла по `filename_pattern`, путь — `articles_path`.
+2. **Push в GitHub.** Через **GitHub Contents API**
+   (`PUT /repos/{owner}/{repo}/contents/{path}`) с токеном — создаём/обновляем
+   файл и коммитим в `branch`. Локальный клон не нужен. Дальше срабатывает ваш
+   GitHub Action → FTP → хостинг (вне нашей зоны).
+3. **X/Twitter.** Постим короткий текст (`social.x`) + ссылку на статью на сайте.
+4. **Instagram.** `instagrapi`: подпись `social.instagram` + **изображение**
+   (см. риск в §11 — IG требует медиа). Сессия хранится на volume.
+5. Записываем `published_urls`, статус **PUBLISHED**; при сбое — **PUBLISH_FAILED**
+   с возможностью ретрая из админки.
+
+---
+
+## 8. Конфигурация и секреты
+
+`.env` (для запуска контейнера):
+```
+LLM_PROVIDER=deepseek    # deepseek | openai | claude | local
+LLM_BASE_URL=https://api.deepseek.com
+LLM_KEY=sk-...
+LLM_MODEL=deepseek-chat
+ADMIN_USER=...           ADMIN_PASSWORD=...
+TELEGRAM_BOT_TOKEN=...   TELEGRAM_CHAT_ID=...
+GITHUB_TOKEN=...         # PAT с доступом к репозиторию сайта (contents:write)
+SECRET_KEY=...           # для шифрования секретов в БД
+```
+Ключи соцсетей (X, Instagram) и LLM можно вводить в админке и хранить
+зашифрованными в `settings` (переопределяют значения из env). На volume `data/` — sqlite, сессии instagrapi,
+last-run маркеры.
+
+---
+
+## 9. CI/CD — сборка и публикация образа через GitHub
+
+`.github/workflows/build-image.yml`:
+- Триггер: push в `main` / тег.
+- Шаги: checkout → `docker/build-push-action` → публикация в **GHCR**
+  (`ghcr.io/<owner>/autopost:latest` + по тегу).
+- На сервере/хосте — `docker compose pull && up -d` (вручную или через watchtower).
+
+Так выполняется требование «всё собирается и публикуется через GitHub».
+
+---
+
+## 10. Запуск (docker-compose)
+
+```yaml
+services:
+  autopost:
+    image: ghcr.io/<owner>/autopost:latest   # или build: .
+    ports: ["8080:8080"]                      # WEB-админка
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./templates_sites:/app/templates_sites
+    restart: unless-stopped
+```
+LLM — внешний облачный API (по `LLM_BASE_URL`, по умолчанию DeepSeek);
+в compose ничего LLM-связанного поднимать не нужно.
+
+---
+
+## 11. Открытые вопросы и риски
+
+1. **Качество чешского у DeepSeek.** API совместим и подключается тривиально,
+   но SEO-текст на чешском нужно протестировать на реальной теме — при слабом
+   результате провайдера переключаем в настройках (Claude/OpenAI), код не меняется.
+   Учесть: DeepSeek — облако с серверами в КНР, туда уходят новости и текст статьи
+   (вопрос чувствительности данных). Цена при этом минимальна (1 статья в 3 дня).
+2. **Instagram требует изображение.** Статья — текст; для IG нужна картинка
+   (обложка из источника, своя заготовка или генерация). Плюс `instagrapi` —
+   неофициальная библиотека, риск блокировок/2FA, против ToS. Решить:
+   оставляем IG в MVP или выносим в фазу 2.
+3. **X/Twitter API.** Бесплатный тариф сильно ограничен по записи. Уточнить
+   уровень доступа/ключи. `xurl` из черновика — это CLI-обёртка, в контейнере
+   удобнее прямой вызов API.
+4. **Авторское право / ToS источников.** Статья должна быть **переработкой**, а
+   не копией; держать ссылку на первоисточник. RSS обычно ок, HTML-парсинг —
+   проверять robots/ToS.
+5. **Структура шаблона сайта.** Нужен пример реального файла статьи на сайте
+   (HTML/Markdown + front-matter?), чтобы задать плейсхолдеры и `filename_pattern`.
+6. **GitHub-доступ:** PAT (через Contents API, проще) vs SSH deploy key + git clone.
+   Рекомендация — PAT + Contents API.
+
+---
+
+## 12. Поэтапный план реализации
+
+- **Фаза 0 — каркас:** репо, Dockerfile, FastAPI, SQLite, CI в GHCR, базовая
+  аутентификация админки.
+- **Фаза 1 — сбор:** модели Sites/Sources, scraper (RSS+HTML), дедуп, тест-кнопка.
+- **Фаза 2 — генерация:** провайдер-независимый LLM-клиент (DeepSeek по умолчанию),
+  JSON-промпт, очередь черновиков, редактор в админке.
+- **Фаза 3 — согласование:** Telegram-бот (кнопки да/нет/правки) + синхронизация статусов с админкой.
+- **Фаза 4 — публикация на сайт:** шаблонизация + push через GitHub API.
+- **Фаза 5 — соцсети:** X, затем Instagram (с решением вопроса медиа).
+- **Фаза 6 — планировщик и эксплуатация:** APScheduler, журнал прогонов, ретраи, ручной запуск.
+
+MVP = Фазы 0–4 (сбор → LLM/DeepSeek → согласование → публикация на сайт).
+Соцсети (Фаза 5) подключаются после.
+```

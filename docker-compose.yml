@@ -1,0 +1,14 @@
+services:
+  autopost:
+    build: .
+    # Либо готовый образ из GHCR (заполните owner):
+    # image: ghcr.io/<owner>/autopost:latest
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./templates_sites:/app/templates_sites
+    restart: unless-stopped
+
+# LLM (Hermes или DeepSeek) — внешний по LLM_BASE_URL, в compose не поднимается.
