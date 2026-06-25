@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     tz: str = "Europe/Prague"
     # Ключ для HTTP API (/api/*). Пусто → API выключен (401). Bearer-токен.
     api_key: str = ""
+    # Кэш ответов LLM (экономия токенов). TTL в днях.
+    llm_cache: bool = True
+    llm_cache_days: int = 30
 
     def resolved_base_url(self) -> str:
         preset = get_preset(self.llm_provider)

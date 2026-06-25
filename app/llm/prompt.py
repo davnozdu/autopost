@@ -73,16 +73,23 @@ def parse_article(raw: str, fallback_image: str | None = None) -> dict:
     }
 
 
-def build_select_prompt(items: list[dict], limit: int, context: str) -> tuple[str, str]:
+def build_select_prompt(
+    items: list[dict], limit: int, context: str, avoid: list[str] | None = None
+) -> tuple[str, str]:
     """Промпт отбора самых стоящих новостей из списка кандидатов."""
     lines = [f"{it['i']}. {it['title']} — {it['summary'][:160]}" for it in items]
     system = (
         f"Jsi editor zpravodajství webu '{context}'. Z níže uvedených zpráv vyber "
         f"{limit} nejzajímavějších a nejrelevantnějších k publikaci (aktuálnost, "
-        f"přínos pro čtenáře, vyhni se duplicitám). "
+        f"přínos pro čtenáře). Vyhni se duplicitám mezi vybranými a NEvybírej zprávy, "
+        f"které se tématem překrývají s již publikovanými. "
         'Vrať POUZE JSON: {"selected":[čísla zpráv]} bez dalšího textu.'
     )
     user = "Zprávy:\n" + "\n".join(lines)
+    if avoid:
+        user += "\n\nJiž publikováno (nevybírej podobné):\n" + "\n".join(
+            f"- {t}" for t in avoid[:30]
+        )
     return system, user
 
 

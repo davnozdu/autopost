@@ -101,12 +101,35 @@ def _migrate_feeds_to_sites(s: Session) -> None:
         s.commit()
 
 
+def _purge_llm_cache() -> None:
+    """Удалить просроченные записи кэша LLM (TTL из настроек)."""
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from sqlmodel import select
+
+        from app.db import models
+
+        ttl = _settings.llm_cache_days
+        cutoff = datetime.now(timezone.utc) - timedelta(days=ttl)
+        with Session(engine) as s:
+            old = s.exec(
+                select(models.LLMCache).where(models.LLMCache.created_at < cutoff)
+            ).all()
+            for row in old:
+                s.delete(row)
+            s.commit()
+    except Exception:
+        pass
+
+
 def init_db() -> None:
     # импорт моделей нужен, чтобы они зарегистрировались в metadata
     from app.db import models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
     _migrate_add_missing_columns()
+    _purge_llm_cache()
     with Session(engine) as s:
         config = s.get(models.AppConfig, 1)
         if config is None:

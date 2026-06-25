@@ -4,6 +4,7 @@
 Используется и планировщиком (автопилот), и ручными кнопками в админке.
 """
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -121,14 +122,19 @@ def _fetch_full(link: str, image: str | None, summary: str) -> tuple[str, str | 
     return text, img
 
 
-def _select_candidates(client, config, candidates: list[dict], limit: int, context: str) -> list[dict]:
+def _norm_title(s: str) -> str:
+    return re.sub(r"[^0-9a-zа-яёіїєґ]+", " ", (s or "").lower()).strip()
+
+
+def _select_candidates(client, config, candidates: list[dict], limit: int,
+                       context: str, avoid: list[str] | None = None) -> list[dict]:
     """Выбрать limit самых стоящих новостей через LLM; при сбое — первые limit."""
     items = [
         {"i": i, "title": e.get("title", ""), "summary": e.get("summary", "")}
         for i, e in enumerate(candidates)
     ]
     try:
-        system, user = build_select_prompt(items, limit, context)
+        system, user = build_select_prompt(items, limit, context, avoid)
         res = client.chat(system, user, json_mode=True, temperature=0.2,
                           model=(config.llm_model or None))
         idx = parse_selection(res.text, len(candidates), limit)
@@ -167,12 +173,22 @@ def collect_and_generate(site_id: int) -> dict:
                 if s.exec(select(Article).where(Article.source_url == link)).first():
                     continue
                 candidates.append(e)
+
+        # дедуп против уже опубликованного (по нормализованному заголовку) — бесплатно
+        pub_titles = s.exec(
+            select(Article.title).where(
+                Article.site_id == site_id, Article.status == "published"
+            )
+        ).all()
+        pub_norm = {_norm_title(t) for t in pub_titles}
+        candidates = [e for e in candidates if _norm_title(e.get("title", "")) not in pub_norm]
         candidates = candidates[:CANDIDATE_POOL]
 
         # 2) отбор: если кандидатов больше лимита — выбрать лучшие через LLM
         limit = max(1, site.collect_limit)
         if len(candidates) > limit:
-            batch = _select_candidates(client, config, candidates, limit, site.name)
+            batch = _select_candidates(client, config, candidates, limit, site.name,
+                                       avoid=list(pub_titles))
         else:
             batch = candidates
 

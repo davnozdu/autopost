@@ -107,6 +107,14 @@ class AppConfig(SQLModel, table=True):
     password_salt: str = ""
 
 
+class LLMCache(SQLModel, table=True):
+    """Кэш ответов LLM (ключ = хэш запроса). Сбрасывается по TTL (см. config)."""
+
+    key: str = Field(primary_key=True)
+    response: str
+    created_at: datetime = Field(default_factory=_now)
+
+
 class Article(SQLModel, table=True):
     """Подготовленная статья: текст, расписание и статус."""
 
