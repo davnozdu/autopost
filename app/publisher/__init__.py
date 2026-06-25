@@ -14,7 +14,7 @@ from app.llm.client import LLMClient, LLMError
 from app.llm.prompt import build_translate_prompt, parse_translation
 from app.publisher.github import put_file
 from app.publisher.render import render_page
-from app.util import lang_name, lang_segment
+from app.util import lang_name, lang_segment, normalize_repo
 
 
 def _target_langs(article: Article, site: Site) -> list[str]:
@@ -41,6 +41,7 @@ def publish(article: Article) -> dict:
         return {"published": False,
                 "note": "Не настроен репозиторий или GitHub-токен сайта."}
 
+    repo = normalize_repo(site.repo)
     primary = lang_segment(article.lang)
     base_content = {
         "title": article.title,
@@ -73,9 +74,9 @@ def publish(article: Article) -> dict:
                 image_url=article.image_url, publish_at=article.publish_at,
                 alternates=targets,
             )
-            put_file(site.repo, site.branch, f"{path_base}/index.html",
+            put_file(repo, site.branch, f"{path_base}/index.html",
                      html.encode("utf-8"), site.github_token, f"blog [{seg}]: {meta['title']}")
-            put_file(site.repo, site.branch, f"{path_base}/meta.json",
+            put_file(repo, site.branch, f"{path_base}/meta.json",
                      json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8"),
                      site.github_token, f"blog meta [{seg}]: {article.slug}")
             published_urls.append(meta["url"])

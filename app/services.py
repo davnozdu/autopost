@@ -4,6 +4,7 @@
 Используется и планировщиком (автопилот), и ручными кнопками в админке.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -19,6 +20,7 @@ from app.scraper.rss import peek_feed
 from app.util import lang_segment, slugify_latin
 
 MAX_PER_COLLECT = 10  # лимит статей за один прогон сбора (защита от лавины/затрат)
+COLLECT_WORKERS = 4   # параллельных потоков загрузки+генерации
 
 _WEEKDAY_IDX = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
@@ -142,11 +144,10 @@ def collect_and_generate(site_id: int) -> dict:
                     continue
                 candidates.append(e)
 
-        # 2) генерация
-        created: list[Article] = []
-        for e in candidates:
-            if len(created) >= MAX_PER_COLLECT:
-                break
+        # 2) генерация — параллельно (загрузка статьи + вызов LLM по сети)
+        batch = candidates[:MAX_PER_COLLECT]
+
+        def _make(e: dict):
             text, img = _fetch_full(e["link"], e.get("image"), e.get("summary", ""))
             try:
                 art = generate_article(
@@ -154,12 +155,21 @@ def collect_and_generate(site_id: int) -> dict:
                     link=e["link"], image=img, text=text,
                 )
             except LLMError:
-                continue
+                return None
             art.status = "scheduled"
-            s.add(art)
-            s.commit()
-            s.refresh(art)
-            created.append(art)
+            return art
+
+        created: list[Article] = []
+        if batch:
+            workers = min(COLLECT_WORKERS, len(batch))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for art in pool.map(_make, batch):  # порядок сохраняется
+                    if art is None:
+                        continue
+                    s.add(art)
+                    s.commit()
+                    s.refresh(art)
+                    created.append(art)
 
         # 3) распределение дат публикации по слотам
         if created:
@@ -176,34 +186,52 @@ def collect_and_generate(site_id: int) -> dict:
 
 
 def run_publish(site_id: int) -> dict:
-    """Опубликовать запланированные статьи сайта, подошедшие по дате."""
+    """Опубликовать нужное число статей (publish_per_run), лишние черновики удалить.
+
+    Берём свежие неопубликованные (scheduled/draft), публикуем первые N; остальные
+    (сверх нужного количества) удаляем. Те из N, что не опубликовались (ошибка),
+    остаются с пометкой — чтобы видеть причину и повторить.
+    """
     from app.publisher import publish
 
     with Session(engine) as s:
         site = s.get(Site, site_id)
         if not site:
-            return {"published": 0, "error": "no site"}
-        now = _now()
-        due = s.exec(
+            return {"published": 0, "deleted": 0, "error": "no site"}
+        per = max(1, site.publish_per_run)
+        pending = s.exec(
             select(Article)
             .where(
                 Article.site_id == site_id,
-                Article.status == "scheduled",
-                Article.publish_at <= now,
+                Article.status.in_(["scheduled", "draft"]),
             )
-            .order_by(Article.publish_at)
+            .order_by(Article.created_at.desc())
         ).all()
+
+        to_publish, surplus = pending[:per], pending[per:]
+        now = _now()
         published = 0
-        for art in due:
-            if published >= max(1, site.publish_per_run):
-                break
+        errors = []
+        for art in to_publish:
             result = publish(art)
             art.publish_note = result.get("note", "")
             if result.get("published"):
                 art.status = "published"
                 art.published_at = now
                 published += 1
-            # если publisher ещё заглушка — статья остаётся scheduled с пометкой
+            else:
+                errors.append(result.get("note", ""))
             s.add(art)
         s.commit()
-        return {"published": published}
+
+        # лишние сверх нужного количества — очищаем
+        deleted = 0
+        for art in surplus:
+            s.delete(art)
+            deleted += 1
+        s.commit()
+
+        note = f"опубликовано {published}, удалено лишних {deleted}"
+        if errors:
+            note += " | ошибки: " + "; ".join(e[:80] for e in errors[:3])
+        return {"published": published, "deleted": deleted, "note": note}

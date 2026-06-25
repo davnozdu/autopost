@@ -32,6 +32,15 @@ def lang_segment(lang: str) -> str:
     return LANG_PATH.get((lang or "cs").strip().lower(), (lang or "cs").strip().lower())
 
 
+def normalize_repo(s: str) -> str:
+    """Привести репозиторий к виду owner/name (принимает и полный URL, и .git)."""
+    s = (s or "").strip()
+    s = re.sub(r"^https?://github\.com/", "", s, flags=re.I)
+    s = re.sub(r"^git@github\.com:", "", s, flags=re.I)
+    s = re.sub(r"\.git$", "", s, flags=re.I)
+    return s.strip("/")
+
+
 # Сегмент языка → человекочитаемое название для промпта перевода.
 LANG_NAME = {
     "cs": "Czech (čeština)",

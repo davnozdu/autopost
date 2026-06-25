@@ -22,6 +22,7 @@ from app.db.models import (
 )
 from app.db.session import engine
 from app.llm.client import LLMClient, LLMError
+from app.util import normalize_repo
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -134,7 +135,7 @@ def save_site(
         if not site:
             return _redirect("/", "Сайт не найден")
         site.name = name.strip()
-        site.repo = repo.strip()
+        site.repo = normalize_repo(repo)
         site.branch = branch.strip() or "main"
         if github_token.strip():
             site.github_token = github_token.strip()
