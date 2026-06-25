@@ -237,8 +237,50 @@ def _send(xc: XClient, post: XPost) -> str:
     return xc.post(text, img)
 
 
-def run_x_publish(account_id: int, count: int = 1) -> dict:
-    """Опубликовать `count` твитов из пула (FIFO)."""
+def _published_this_month(account_id: int) -> int:
+    now = _now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    with Session(engine) as s:
+        return len(s.exec(
+            select(XPost).where(
+                XPost.account_id == account_id,
+                XPost.status == "published",
+                XPost.published_at >= month_start,
+            )
+        ).all())
+
+
+def _pool_size(account_id: int) -> int:
+    with Session(engine) as s:
+        return len(s.exec(
+            select(XPost).where(
+                XPost.account_id == account_id, XPost.status == "scheduled"
+            )
+        ).all())
+
+
+def run_x_publish(account_id: int, skippable: bool = False, count: int = 1) -> dict:
+    """Опубликовать `count` твитов (FIFO) с учётом лимитов free-тарифа X.
+
+    skippable=True (2-й и далее слот дня) → публикуем «через раз», чтобы выходило
+    то 1, то 2 твита в день. Жёсткий месячный лимит (`monthly_limit`) не даёт
+    превысить 500/мес. Если пул пуст — авто-добор.
+    """
+    import random
+
+    with Session(engine) as s:
+        acc = s.get(XAccount, account_id)
+        if not acc:
+            return {"published": 0, "error": "no account"}
+        limit = acc.monthly_limit
+
+    if skippable and random.random() < 0.5:
+        return {"published": 0, "note": "пропуск слота (вариативность 1–2/день)"}
+    if _published_this_month(account_id) >= limit:
+        return {"published": 0, "note": f"достигнут месячный лимит {limit}"}
+    if _pool_size(account_id) == 0:
+        collect_account(account_id)
+
     with Session(engine) as s:
         acc = s.get(XAccount, account_id)
         if not acc:

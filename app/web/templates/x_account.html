@@ -44,8 +44,18 @@
         <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
       </div>
     </div>
-    <label>Времена твитов <span class="muted">(через запятую)</span></label>
+    <label>Времена твитов <span class="muted">(через запятую; 2-й и далее слот публикуется через раз → 1–2/день)</span></label>
     <input type="text" name="post_times" value="{{ acc.post_times }}" placeholder="11:00,18:00">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="min-width:150px">
+        <label>Сдвиг времени ±мин</label>
+        <input type="number" name="jitter_min" value="{{ acc.jitter_min }}" min="0" max="30">
+      </div>
+      <div style="min-width:170px">
+        <label>Лимит твитов в месяц <span class="muted">(free X = 500)</span></label>
+        <input type="number" name="monthly_limit" value="{{ acc.monthly_limit }}" min="1" max="500">
+      </div>
+    </div>
 
     <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>

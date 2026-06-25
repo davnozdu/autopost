@@ -39,10 +39,16 @@
         <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
       </div>
     </div>
-    <label>Времена постов <span class="muted">(через запятую; сториз в Telegram нет)</span></label>
+    <label>Времена постов <span class="muted">(через запятую; игнорируются в режиме «каждый час»)</span></label>
     <input type="text" name="post_times" value="{{ acc.post_times }}" placeholder="11:00,18:00">
-
-    <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="min-width:160px">
+        <label>Сдвиг времени ±мин <span class="muted">(случайно)</span></label>
+        <input type="number" name="jitter_min" value="{{ acc.jitter_min }}" min="0" max="30">
+      </div>
+    </div>
+    <label style="margin-top:12px"><input type="checkbox" name="post_every_hour" {% if acc.post_every_hour %}checked{% endif %}> Постить каждый час (без лимита; пул добирается автоматически)</label>
+    <label><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
 </div>

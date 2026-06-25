@@ -191,8 +191,19 @@ def verify_account(account_id: int) -> dict:
         return {"ok": True, "note": acc.verify_note}
 
 
+def _pool_size(account_id: int) -> int:
+    with Session(engine) as s:
+        return len(s.exec(
+            select(TGPost).where(
+                TGPost.account_id == account_id, TGPost.status == "scheduled"
+            )
+        ).all())
+
+
 def run_tg_publish(account_id: int, count: int = 1) -> dict:
-    """Опубликовать `count` постов из пула (FIFO)."""
+    """Опубликовать `count` постов из пула (FIFO). Если пул пуст — авто-добор."""
+    if _pool_size(account_id) == 0:
+        collect_account(account_id)  # часовой режим: держим пул наполненным
     with Session(engine) as s:
         acc = s.get(TGAccount, account_id)
         if not acc:

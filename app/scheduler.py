@@ -22,6 +22,8 @@ from app.x import service as x_service
 
 _scheduler: BackgroundScheduler | None = None
 
+IG_JITTER = 300  # случайный сдвиг публикаций Instagram, ±5 минут
+
 
 def _tz() -> ZoneInfo:
     return ZoneInfo(get_settings().tz)
@@ -80,6 +82,7 @@ def reload_jobs() -> None:
             continue
 
     # Instagram-аккаунты: ежедневный сбор + 1 пост/день + сториз по временам.
+    # jitter = случайный сдвиг времени публикации (естественность, меньше «механики»).
     for acc in ig_accounts:
         try:
             cch, ccm = services._parse_hhmm(acc.collect_time)
@@ -91,42 +94,53 @@ def reload_jobs() -> None:
             pph, ppm = services._parse_hhmm(acc.post_time)
             _scheduler.add_job(
                 ig_service.run_ig_publish,
-                CronTrigger(hour=pph, minute=ppm, timezone=tz),
+                CronTrigger(hour=pph, minute=ppm, timezone=tz, jitter=IG_JITTER),
                 args=[acc.id, "post"], id=f"ig-post-{acc.id}", replace_existing=True,
             )
             for i, t in enumerate(x for x in acc.story_times.split(",") if x.strip()):
                 sh, sm = services._parse_hhmm(t.strip())
                 _scheduler.add_job(
                     ig_service.run_ig_publish,
-                    CronTrigger(hour=sh, minute=sm, timezone=tz),
+                    CronTrigger(hour=sh, minute=sm, timezone=tz, jitter=IG_JITTER),
                     args=[acc.id, "story"], id=f"ig-story-{acc.id}-{i}",
                     replace_existing=True,
                 )
         except Exception:
             continue
 
-    # Telegram-аккаунты: ежедневный сбор + посты по списку времён (сториз нет).
+    # Telegram-аккаунты: сбор + посты. Режим «каждый час» (Telegram без лимита) или
+    # по списку времён; во всех случаях случайный сдвиг ±jitter_min минут.
     for acc in tg_accounts:
         try:
+            jit = max(0, acc.jitter_min) * 60
             cch, ccm = services._parse_hhmm(acc.collect_time)
             _scheduler.add_job(
                 tg_service.collect_account,
                 CronTrigger(hour=cch, minute=ccm, timezone=tz),
                 args=[acc.id], id=f"tg-collect-{acc.id}", replace_existing=True,
             )
-            for i, t in enumerate(x for x in acc.post_times.split(",") if x.strip()):
-                ph, pm = services._parse_hhmm(t.strip())
+            if acc.post_every_hour:
                 _scheduler.add_job(
                     tg_service.run_tg_publish,
-                    CronTrigger(hour=ph, minute=pm, timezone=tz),
-                    args=[acc.id], id=f"tg-post-{acc.id}-{i}", replace_existing=True,
+                    CronTrigger(minute=0, timezone=tz, jitter=jit),
+                    args=[acc.id], id=f"tg-post-{acc.id}-hourly", replace_existing=True,
                 )
+            else:
+                for i, t in enumerate(x for x in acc.post_times.split(",") if x.strip()):
+                    ph, pm = services._parse_hhmm(t.strip())
+                    _scheduler.add_job(
+                        tg_service.run_tg_publish,
+                        CronTrigger(hour=ph, minute=pm, timezone=tz, jitter=jit),
+                        args=[acc.id], id=f"tg-post-{acc.id}-{i}", replace_existing=True,
+                    )
         except Exception:
             continue
 
-    # X (Twitter): ежедневный сбор + твиты по списку времён.
+    # X (Twitter): сбор + твиты по временам с джиттером. Второй и далее слоты —
+    # «через раз» (skippable), чтобы выходило то 1, то 2 в день; плюс месячный лимит.
     for acc in x_accounts:
         try:
+            jit = max(0, acc.jitter_min) * 60
             cch, ccm = services._parse_hhmm(acc.collect_time)
             _scheduler.add_job(
                 x_service.collect_account,
@@ -137,8 +151,8 @@ def reload_jobs() -> None:
                 ph, pm = services._parse_hhmm(t.strip())
                 _scheduler.add_job(
                     x_service.run_x_publish,
-                    CronTrigger(hour=ph, minute=pm, timezone=tz),
-                    args=[acc.id], id=f"x-post-{acc.id}-{i}", replace_existing=True,
+                    CronTrigger(hour=ph, minute=pm, timezone=tz, jitter=jit),
+                    args=[acc.id, i > 0], id=f"x-post-{acc.id}-{i}", replace_existing=True,
                 )
         except Exception:
             continue

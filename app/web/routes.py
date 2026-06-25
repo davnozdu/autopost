@@ -723,6 +723,8 @@ def tg_save_account(
     language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_times: str = Form("11:00,18:00"),
+    post_every_hour: bool = Form(False),
+    jitter_min: int = Form(10),
     collect_limit: int = Form(8),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
@@ -740,6 +742,8 @@ def tg_save_account(
         acc.post_times = ",".join(
             t.strip() for t in post_times.split(",") if t.strip()
         ) or "11:00,18:00"
+        acc.post_every_hour = post_every_hour
+        acc.jitter_min = max(0, min(30, jitter_min))
         acc.collect_limit = max(1, collect_limit)
         acc.enabled = enabled
         s.add(acc)
@@ -958,6 +962,8 @@ def x_save_account(
     language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_times: str = Form("11:00,18:00"),
+    jitter_min: int = Form(10),
+    monthly_limit: int = Form(450),
     collect_limit: int = Form(8),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
@@ -967,6 +973,8 @@ def x_save_account(
         if not acc:
             return _redirect("/x", "Аккаунт не найден")
         acc.name = name.strip()
+        acc.jitter_min = max(0, min(30, jitter_min))
+        acc.monthly_limit = max(1, min(500, monthly_limit))
         if api_key.strip():
             acc.api_key = api_key.strip()
         if api_secret.strip():
