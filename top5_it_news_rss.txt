@@ -1,39 +1,73 @@
-Top 5 IT News RSS Feeds (verified working — June 25, 2026)
-=========================================================
+Top 10 IT News RSS Feeds (verified working — June 25, 2026)
+==========================================================
+
+═══ BATCH 1 — General IT / Tech News ═══
 
 1. TechCrunch
    URL:        https://techcrunch.com/feed/
    Format:     RSS 2.0
-   Status:     ✓ 200 OK (application/rss+xml)
-   About:      Fastest source for startup funding, VC news, product launches.
+   Status:     ✓ HTTP 200 — application/rss+xml
+   About:      Startup funding, VC news, product launches, tech industry.
 
 2. The Verge
    URL:        https://www.theverge.com/rss/index.xml
    Format:     Atom
-   Status:     ✓ 200 OK (application/xml)
+   Status:     ✓ HTTP 200 — application/xml
    About:      Consumer tech, reviews, culture, and industry news.
 
 3. Ars Technica
    URL:        https://feeds.arstechnica.com/arstechnica/index
    Format:     RSS 2.0
-   Status:     ✓ 200 OK (text/xml)
+   Status:     ✓ HTTP 200 — text/xml
    About:      In-depth IT, science, security, and policy coverage.
 
 4. Wired
    URL:        https://www.wired.com/feed/rss
    Format:     RSS 2.0
-   Status:     ✓ 200 OK (application/xml)
+   Status:     ✓ HTTP 200 — application/xml
    About:      Tech, science, business, security, and culture reporting.
 
 5. Hacker News (Front Page)
    URL:        https://hnrss.org/frontpage
    Format:     RSS 2.0
-   Status:     ✓ 200 OK (application/xml)
+   Status:     ✓ HTTP 200 — application/xml
    About:      Community-curated tech/startup/programming front-page links.
-   Note:       Uses hnrss.org (third-party RSS proxy for HN).
+   Note:       Third-party RSS proxy for HN (hnrss.org).
+
+═══ BATCH 2 — Apple | Hardware | Software | Computers ═══
+
+6. 9to5Mac
+   URL:        https://9to5mac.com/feed/
+   Format:     RSS 2.0
+   Status:     ✓ HTTP 200 — application/rss+xml
+   About:      Apple ecosystem: macOS, iOS, Mac hardware, Apple news.
+
+7. MacRumors
+   URL:        https://feeds.macrumors.com/MacRumors-All
+   Format:     RSS 2.0
+   Status:     ✓ HTTP 200 — text/xml
+   About:      Apple rumors, reviews, buying guides, software updates.
+
+8. Tom's Hardware
+   URL:        https://www.tomshardware.com/feeds.xml
+   Format:     RSS 2.0
+   Status:     ✓ HTTP 200 — valid XML (redirects /feeds/all → /feeds.xml)
+   About:      PC hardware: CPUs, GPUs, motherboards, benchmarks, reviews.
+
+9. Liliputing
+   URL:        https://liliputing.com/feed/
+   Format:     RSS 2.0
+   Status:     ✓ HTTP 200 — text/xml
+   About:      Laptops, mini-PCs, single-board computers, Linux devices.
+
+10. ZDNet
+    URL:        https://www.zdnet.com/news/rss.xml
+    Format:     RSS 2.0
+    Status:     ✓ HTTP 200 — application/xml
+    About:      Enterprise IT, Windows, software, hardware, security.
 
 ────────────────────────────────────────────────
-All feeds tested via HTTP HEAD + GET:
+All feeds tested via HTTP HEAD + GET (curl):
   ✓ Return HTTP 200
-  ✓ Return valid XML with RSS/Atom content type
-  ✓ Contain real feed items (titles, links, descriptions)
+  ✓ Return valid XML with proper RSS/Atom content type
+  ✓ Contain real feed items (titles, links, descriptions, dates)

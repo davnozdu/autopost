@@ -242,14 +242,13 @@ class TGPost(SQLModel, table=True):
 
 
 class XAccount(SQLModel, table=True):
-    """Аккаунт X (Twitter): ключи OAuth 1.0a и расписание."""
+    """Аккаунт X (Twitter): OAuth 2.0 (Client ID/Secret + refresh token) и расписание."""
 
     id: int | None = Field(default=None, primary_key=True)
     name: str
-    api_key: str = ""              # Consumer Key (API Key)
-    api_secret: str = ""           # Consumer Secret (API Key Secret)
-    access_token: str = ""         # Access Token аккаунта
-    access_secret: str = ""        # Access Token Secret
+    client_id: str = ""            # OAuth 2.0 Client ID
+    client_secret: str = ""        # OAuth 2.0 Client Secret
+    refresh_token: str = ""        # OAuth 2.0 Refresh Token (ротируется, храним свежий)
     language: str = "ru"           # язык публикации
     collect_time: str = "07:00"
     post_times: str = "11:00,18:00"  # времена публикации твитов (2-й слот — через раз)

@@ -14,19 +14,17 @@
 
 <!-- Настройки аккаунта -->
 <div class="card">
-  <h3 style="margin-top:0;font-size:1rem">Ключи и настройки</h3>
-  <p class="muted" style="margin-top:0">developer.x.com → ваш проект/приложение → User authentication: Read and Write → сгенерируйте ключи. Оставьте поле пустым, чтобы не менять.</p>
+  <h3 style="margin-top:0;font-size:1rem">Ключи и настройки (OAuth 2.0)</h3>
+  <p class="muted" style="margin-top:0">developer.x.com → User authentication settings: тип App — «Web App, Automated App or Bot» (confidential), App permissions — Read and write, scopes — <b>tweet.read tweet.write users.read offline.access</b>. Затем в Keys and tokens → OAuth 2.0 сгенерируйте токены и скопируйте <b>Refresh Token</b>. Пустое поле — не менять.</p>
   <form method="post" action="/x/{{ acc.id }}">
     <label>Название</label>
     <input type="text" name="name" value="{{ acc.name }}" required>
-    <label>API Key (Consumer Key)</label>
-    <input type="text" name="api_key" value="" placeholder="{% if acc.api_key %}••••••••{% else %}API Key{% endif %}">
-    <label>API Key Secret</label>
-    <input type="text" name="api_secret" value="" placeholder="{% if acc.api_secret %}••••••••{% else %}API Key Secret{% endif %}">
-    <label>Access Token</label>
-    <input type="text" name="access_token" value="" placeholder="{% if acc.access_token %}••••••••{% else %}Access Token{% endif %}">
-    <label>Access Token Secret</label>
-    <input type="text" name="access_secret" value="" placeholder="{% if acc.access_secret %}••••••••{% else %}Access Token Secret{% endif %}">
+    <label>Client ID <span class="muted">(OAuth 2.0 Client ID)</span></label>
+    <input type="text" name="client_id" value="" placeholder="{% if acc.client_id %}••••••••{% else %}Client ID{% endif %}">
+    <label>Client Secret <span class="muted">(OAuth 2.0 Client Secret)</span></label>
+    <input type="text" name="client_secret" value="" placeholder="{% if acc.client_secret %}••••••••{% else %}Client Secret{% endif %}">
+    <label>Refresh Token <span class="muted">(из сгенерированных OAuth 2.0 токенов; с scope tweet.write + offline.access)</span></label>
+    <input type="text" name="refresh_token" value="" placeholder="{% if acc.refresh_token %}••••••••{% else %}Refresh Token{% endif %}">
     <label>Язык публикации <span class="muted">(на нём LLM готовит твит)</span></label>
     <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
       {% for code, lbl in languages %}

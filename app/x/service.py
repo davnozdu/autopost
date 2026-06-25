@@ -1,18 +1,15 @@
 """Бизнес-логика X (Twitter): сбор материалов в пул (равномерная ротация
-источников + LLM-выбор внутри источника) и публикация твитов с картинкой.
+источников + LLM-выбор внутри источника) и публикация твитов (OAuth 2.0).
 
 Лимит твита — 280 символов; ссылка считается за 23 (X сам сокращает в t.co).
+Картинку не прикладываем — X показывает превью по ссылке на статью (og:image).
 """
 
 from datetime import datetime, timezone
-from io import BytesIO
-from pathlib import Path
 
-import httpx
 from sqlmodel import Session, select
 
 from app import services
-from app.config import get_settings
 from app.db.models import AppConfig, XAccount, XPost, XSource
 from app.db.session import engine
 from app.instagram.service import _rotate, _select_within, _shorten
@@ -30,12 +27,6 @@ SELECT_PER_SOURCE = 5
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _media_dir() -> Path:
-    d = Path(get_settings().data_dir) / "x" / "media"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
 
 
 def _compose(body: str, link: str, tags: list[str]) -> str:
@@ -70,29 +61,6 @@ def _fit(client: LLMClient, config: AppConfig, language: str, body: str,
         body = body[: max(10, len(body) - 10)].rstrip()
         cap = _compose(body.rstrip(" .,;:") + "…", link, tags)
     return cap
-
-
-def _download(url: str | None) -> Path | None:
-    url = clean_image_url(url)
-    if not url:
-        return None
-    try:
-        r = httpx.get(url, timeout=30, follow_redirects=True,
-                      headers={"User-Agent": "Mozilla/5.0 autopost"})
-        r.raise_for_status()
-        data = r.content
-    except Exception:
-        return None
-    # привести к JPEG, чтобы X точно принял
-    try:
-        from PIL import Image
-
-        img = Image.open(BytesIO(data)).convert("RGB")
-        out = _media_dir() / "tmp.jpg"
-        img.save(out, "JPEG", quality=90)
-        return out
-    except Exception:
-        return None
 
 
 def collect_account(account_id: int) -> dict:
@@ -208,33 +176,51 @@ def collect_account(account_id: int) -> dict:
         return {"created": created}
 
 
+def _authorize(s: Session, acc: XAccount) -> "XClient":
+    """Создать клиент, обновить access token и СОХРАНИТЬ свежий refresh_token.
+
+    Refresh-токен X ротируется и одноразовый — поэтому сохраняем сразу после
+    успешного обновления, иначе следующий запуск не авторизуется.
+    """
+    xc = XClient(acc)
+    xc.authorize()
+    if xc.new_refresh_token and xc.new_refresh_token != acc.refresh_token:
+        acc.refresh_token = xc.new_refresh_token
+        s.add(acc)
+        s.commit()
+    return xc
+
+
 def verify_account(account_id: int) -> dict:
     with Session(engine) as s:
         acc = s.get(XAccount, account_id)
         if not acc:
             return {"ok": False, "note": "no account"}
         try:
-            info = XClient(acc).verify()
+            xc = _authorize(s, acc)
+            info = xc.verify()
         except XError as exc:
             acc.verify_status = "error"
             acc.verify_note = str(exc)[:300]
             s.add(acc)
             s.commit()
             return {"ok": False, "note": str(exc)}
-        acc.verify_status = "ok"
-        acc.verify_note = f"аккаунт @{info['username']}"
+        note = f"аккаунт @{info['username']}"
+        if "tweet.write" not in (info.get("scope") or ""):
+            note += " ⚠ в токене нет scope tweet.write — постинг не сработает, перевыпустите токен с tweet.write"
+        acc.verify_status = "ok" if "tweet.write" in (info.get("scope") or "") else "error"
+        acc.verify_note = note
         s.add(acc)
         s.commit()
-        return {"ok": True, "note": acc.verify_note}
+        return {"ok": acc.verify_status == "ok", "note": note}
 
 
-def _send(xc: XClient, post: XPost) -> str:
-    """Собрать текст твита (подпись + ссылка) и опубликовать с картинкой."""
+def _send(xc: "XClient", post: XPost) -> str:
+    """Текст твита (подпись + ссылка) → публикация. Картинку X подтянет по ссылке."""
     text = post.caption or ""
     if post.link_url and post.link_url not in text:
         text = (text.rstrip() + "\n" + post.link_url).strip()
-    img = _download(post.image_url)
-    return xc.post(text, img)
+    return xc.post(text)
 
 
 def _published_this_month(account_id: int) -> int:
@@ -293,7 +279,7 @@ def run_x_publish(account_id: int, skippable: bool = False, count: int = 1) -> d
         if not pending:
             return {"published": 0, "note": "нет материалов в пуле"}
         try:
-            xc = XClient(acc)
+            xc = _authorize(s, acc)  # обновляем токен + сохраняем свежий refresh
         except XError as exc:
             return {"published": 0, "note": str(exc)}
 

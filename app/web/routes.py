@@ -955,10 +955,9 @@ def x_account_page(request: Request, account_id: int, msg: str = "") -> HTMLResp
 def x_save_account(
     account_id: int,
     name: str = Form(...),
-    api_key: str = Form(""),
-    api_secret: str = Form(""),
-    access_token: str = Form(""),
-    access_secret: str = Form(""),
+    client_id: str = Form(""),
+    client_secret: str = Form(""),
+    refresh_token: str = Form(""),
     language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_times: str = Form("11:00,18:00"),
@@ -975,14 +974,12 @@ def x_save_account(
         acc.name = name.strip()
         acc.jitter_min = max(0, min(30, jitter_min))
         acc.monthly_limit = max(1, min(500, monthly_limit))
-        if api_key.strip():
-            acc.api_key = api_key.strip()
-        if api_secret.strip():
-            acc.api_secret = api_secret.strip()
-        if access_token.strip():
-            acc.access_token = access_token.strip()
-        if access_secret.strip():
-            acc.access_secret = access_secret.strip()
+        if client_id.strip():
+            acc.client_id = client_id.strip()
+        if client_secret.strip():
+            acc.client_secret = client_secret.strip()
+        if refresh_token.strip():
+            acc.refresh_token = refresh_token.strip()
         acc.language = language if language in allowed_l else "ru"
         acc.collect_time = collect_time.strip() or "07:00"
         acc.post_times = ",".join(
@@ -1099,8 +1096,8 @@ def x_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
 
 @router.post("/x-posts/{post_id}/publish")
 def x_publish_post(post_id: int) -> RedirectResponse:
-    from app.x.client import XClient, XError
-    from app.x.service import _send
+    from app.x.client import XError
+    from app.x.service import _authorize, _send
 
     with Session(engine) as s:
         post = s.get(XPost, post_id)
@@ -1109,7 +1106,8 @@ def x_publish_post(post_id: int) -> RedirectResponse:
         account_id = post.account_id
         acc = s.get(XAccount, account_id)
         try:
-            tid = _send(XClient(acc), post)
+            xc = _authorize(s, acc)  # обновить токен + сохранить свежий refresh
+            tid = _send(xc, post)
         except XError as exc:
             post.status = "failed"
             post.publish_note = str(exc)[:300]
