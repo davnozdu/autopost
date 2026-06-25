@@ -19,8 +19,7 @@ from app.scraper.rss import peek_feed
 from app.util import clean_image_url
 from app.x.client import XClient, XError
 
-X_LIMIT = 280
-URL_LEN = 23              # X считает любую ссылку за 23 символа
+X_LIMIT = 280            # лимит твита; ссылки в основном твите нет (она в ответе)
 X_MAX_HASHTAGS = 3
 SELECT_PER_SOURCE = 5
 
@@ -29,37 +28,26 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _compose(body: str, link: str, tags: list[str]) -> str:
+def _compose(body: str, tags: list[str]) -> str:
+    """Текст основного твита: тело + хэштеги. Ссылку НЕ включаем — она идёт ответом."""
     s = (body or "").strip()
-    tagline = " ".join("#" + t.lstrip("#") for t in tags if t.strip())
+    tagline = " ".join("#" + t.lstrip("#") for t in tags[:X_MAX_HASHTAGS] if t.strip())
     if tagline:
-        s += "\n" + tagline
-    if link.strip():
-        s += "\n" + link.strip()
+        s += "\n\n" + tagline
     return s
 
 
-def _eff_len(text: str, link: str) -> int:
-    """Длина твита по правилам X: ссылка считается за 23 символа."""
-    n = len(text)
-    if link.strip() and link.strip() in text:
-        n = n - len(link.strip()) + URL_LEN
-    return n
-
-
 def _fit(client: LLMClient, config: AppConfig, language: str, body: str,
-         link: str, tags: list[str]) -> str:
-    tags = tags[:X_MAX_HASHTAGS]
-    cap = _compose(body, link, tags)
-    if _eff_len(cap, link) <= X_LIMIT:
+         tags: list[str]) -> str:
+    """Подпись основного твита в пределах 280 (ссылки в нём нет — она в ответе)."""
+    cap = _compose(body, tags)
+    if len(cap) <= X_LIMIT:
         return cap
-    overhead = _eff_len(_compose("", link, tags), link)
+    overhead = len(_compose("", tags))
     body = _shorten(client, config, language, body, max(40, X_LIMIT - overhead - 3))
-    cap = _compose(body, link, tags)
-    # финальная страховка: подрезать тело, если всё ещё длинно
-    while _eff_len(cap, link) > X_LIMIT and len(body) > 10:
-        body = body[: max(10, len(body) - 10)].rstrip()
-        cap = _compose(body.rstrip(" .,;:") + "…", link, tags)
+    cap = _compose(body, tags)
+    if len(cap) > X_LIMIT:
+        cap = cap[: X_LIMIT - 1].rstrip() + "…"
     return cap
 
 
@@ -155,7 +143,7 @@ def collect_account(account_id: int) -> dict:
                 body, hashtags = parse_ig_parts(res.text, fallback_text=summary)
             except LLMError:
                 continue
-            caption = _fit(client, config, language, body, link_url, hashtags)
+            caption = _fit(client, config, language, body, hashtags)
             s.add(XPost(
                 account_id=account_id,
                 source_id=e.get("_src_id", 0),
@@ -197,11 +185,8 @@ def verify_account(account_id: int) -> dict:
 
 
 def _send(xc: "XClient", post: XPost) -> str:
-    """Текст твита (подпись + ссылка) → публикация. Картинку X подтянет по ссылке."""
-    text = post.caption or ""
-    if post.link_url and post.link_url not in text:
-        text = (text.rstrip() + "\n" + post.link_url).strip()
-    return xc.post(text)
+    """Основной твит (без ссылки) + ссылка первым комментарием — лучше для охвата."""
+    return xc.post(post.caption or "", link=post.link_url or "")
 
 
 def _published_this_month(account_id: int) -> int:

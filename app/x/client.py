@@ -56,31 +56,47 @@ class XClient:
         except Exception as exc:
             raise XError(f"Проверка не удалась (cookie неверны/протухли?): {exc}")
 
-    def post(self, text: str) -> str:
-        """Опубликовать твит. Возвращает id.
+    @staticmethod
+    async def _create(c, text: str, reply_to: str | None = None) -> str:
+        """Создать твит/ответ через нижний GraphQL-слой; вернуть rest_id.
 
-        Идём через нижний GraphQL-слой twikit и сами достаём rest_id — чтобы НЕ
-        зависеть от хрупкого разбора ответа в twikit (User-парсер падает с
-        KeyError на изменившейся структуре ответа X, хотя твит уже создан).
+        В обход высокоуровневого create_tweet — его User-парсер падает с KeyError
+        на изменившейся структуре ответа X, хотя твит уже создан.
+        Сигнатура gql.create_tweet (twikit 2.3.x): is_note_tweet, text,
+        media_entities, poll_uri, reply_to, attachment_url, community_id,
+        share_with_followers, richtext_options, edit_tweet_id, limit_mode.
+        """
+        response, _ = await c.gql.create_tweet(
+            False, text, [], None, reply_to, None, None, False, None, None, None
+        )
+        if isinstance(response, dict) and response.get("errors"):
+            raise XError(str(response["errors"][0] if response["errors"] else response))
+        try:
+            return str(
+                response["data"]["create_tweet"]["tweet_results"]["result"].get("rest_id", "")
+                or ""
+            )
+        except Exception:
+            return ""  # твит создан, но id не достали — не критично
+
+    def post(self, text: str, link: str = "") -> str:
+        """Опубликовать основной твит (без ссылки) и ссылку — первым комментарием.
+
+        Так основной твит не теряет охват из-за внешней ссылки, а переход на сайт
+        даёт ответ под ним. Возвращает id основного твита.
         """
         if not self.twid:
             raise XError("Для публикации нужен cookie twid (id аккаунта)")
 
         async def _run():
             c = self._new_client()
-            # сигнатура gql.create_tweet (twikit 2.3.x): is_note_tweet, text,
-            # media_entities, poll_uri, reply_to, attachment_url, community_id,
-            # share_with_followers, richtext_options, edit_tweet_id, limit_mode
-            response, _ = await c.gql.create_tweet(
-                False, text, [], None, None, None, None, False, None, None, None
-            )
-            if isinstance(response, dict) and response.get("errors"):
-                raise XError(str(response["errors"][0] if response["errors"] else response))
-            try:
-                result = response["data"]["create_tweet"]["tweet_results"]["result"]
-                return str(result.get("rest_id", "") or "")
-            except Exception:
-                return ""  # твит создан, но id из ответа не достали — не критично
+            main_id = await self._create(c, text)
+            if link.strip() and main_id:
+                try:
+                    await self._create(c, f"Подробнее: {link.strip()}", reply_to=main_id)
+                except Exception:
+                    pass  # основной твит уже опубликован; ответ со ссылкой не критичен
+            return main_id
 
         try:
             return asyncio.run(_run())
