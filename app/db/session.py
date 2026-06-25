@@ -45,6 +45,8 @@ def _migrate_add_missing_columns() -> None:
             if not insp.has_table(table_name):
                 continue  # новую таблицу создаст create_all
             existing = {c["name"] for c in insp.get_columns(table_name)}
+            model_cols = {c.name for c in table.columns}
+            # добавить недостающие колонки
             for column in table.columns:
                 if column.name in existing:
                     continue
@@ -56,6 +58,15 @@ def _migrate_add_missing_columns() -> None:
                         f'ADD COLUMN "{column.name}" {col_type} DEFAULT {default}'
                     )
                 )
+            # удалить устаревшие колонки-сироты (которых нет в модели): они могут
+            # иметь NOT NULL без значения и ломать INSERT (напр. legacy feed_name).
+            for col_name in existing - model_cols:
+                try:
+                    conn.execute(
+                        text(f'ALTER TABLE "{table_name}" DROP COLUMN "{col_name}"')
+                    )
+                except Exception:
+                    pass
 
 
 # Прежняя инструкция по умолчанию — заменяем на новую, если пользователь её не менял.

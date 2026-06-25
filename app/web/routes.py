@@ -102,7 +102,7 @@ def site_page(request: Request, site_id: int, msg: str = "") -> HTMLResponse:
             "sources": sources,
             "languages": LANGUAGES,
             "weekdays": WEEKDAYS,
-            "site_langs": site.languages.split(","),
+            "site_langs": [("cs" if x == "cz" else x) for x in site.languages.split(",")],
             "collect_days": site.collect_days.split(","),
             "publish_days": site.publish_days.split(","),
             "runs": runs,

@@ -36,7 +36,7 @@ DEFAULT_LLM_INSTRUCTIONS = (
 )
 
 # Языки перевода для заливки (код → метка). Используется в настройках сайта.
-LANGUAGES = [("ru", "RU"), ("en", "EN"), ("cz", "CZ"), ("de", "DE"), ("ua", "UA")]
+LANGUAGES = [("ru", "RU"), ("en", "EN"), ("cs", "CS"), ("de", "DE"), ("ua", "UA")]
 
 # Дни недели для расписания (код APScheduler → метка).
 WEEKDAYS = [
