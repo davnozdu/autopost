@@ -976,6 +976,7 @@ def x_save_account(
     name: str = Form(...),
     auth_token: str = Form(""),
     ct0: str = Form(""),
+    twid: str = Form(""),
     language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_times: str = Form("11:00,18:00"),
@@ -996,6 +997,8 @@ def x_save_account(
             acc.auth_token = auth_token.strip()
         if ct0.strip():
             acc.ct0 = ct0.strip()
+        if twid.strip():
+            acc.twid = twid.strip()
         acc.language = language if language in allowed_l else "ru"
         acc.collect_time = collect_time.strip() or "07:00"
         acc.post_times = ",".join(

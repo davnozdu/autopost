@@ -15,7 +15,7 @@
 <!-- Настройки аккаунта -->
 <div class="card">
   <h3 style="margin-top:0;font-size:1rem">Cookie аккаунта (без платного API)</h3>
-  <p class="muted" style="margin-top:0">Публикация идёт через внутренний веб-API X по cookie вашего аккаунта (бесплатно). Как достать: в браузере залогиньтесь в @bigtweak_cz → F12 → вкладка Application/Storage → Cookies → https://x.com → скопируйте значения <b>auth_token</b> и <b>ct0</b>. Пустое поле — не менять.</p>
+  <p class="muted" style="margin-top:0">Публикация идёт через внутренний веб-API X по cookie вашего аккаунта (бесплатно). Как достать: залогиньтесь в @bigtweak_cz → F12 → Application/Storage → Cookies → https://x.com → скопируйте <b>auth_token</b>, <b>ct0</b> и <b>twid</b>. Пустое поле — не менять.</p>
   <form method="post" action="/x/{{ acc.id }}">
     <label>Название</label>
     <input type="text" name="name" value="{{ acc.name }}" required>
@@ -23,6 +23,8 @@
     <input type="text" name="auth_token" value="" placeholder="{% if acc.auth_token %}••••••••{% else %}auth_token{% endif %}">
     <label>ct0 <span class="muted">(cookie)</span></label>
     <input type="text" name="ct0" value="" placeholder="{% if acc.ct0 %}••••••••{% else %}ct0{% endif %}">
+    <label>twid <span class="muted">(cookie, обязателен для публикации; вид u%3D123…)</span></label>
+    <input type="text" name="twid" value="" placeholder="{% if acc.twid %}••••••••{% else %}u%3D...{% endif %}">
     <label>Язык публикации <span class="muted">(на нём LLM готовит твит)</span></label>
     <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
       {% for code, lbl in languages %}

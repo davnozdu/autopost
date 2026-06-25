@@ -248,6 +248,7 @@ class XAccount(SQLModel, table=True):
     name: str
     auth_token: str = ""           # cookie auth_token из браузера (залогинен в аккаунт)
     ct0: str = ""                  # cookie ct0 (CSRF) из браузера
+    twid: str = ""                 # cookie twid (id пользователя) — нужен для ПУБЛИКАЦИИ
     language: str = "ru"           # язык публикации
     collect_time: str = "07:00"
     post_times: str = "11:00,18:00"  # времена публикации твитов (2-й слот — через раз)
