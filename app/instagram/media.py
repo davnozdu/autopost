@@ -63,42 +63,37 @@ def _wrap(draw, text: str, font, max_w: int, max_lines: int) -> list[str]:
     return lines[:max_lines]
 
 
-def _draw_story_text(img, title: str, tags: list[str]) -> None:
-    """Наложить заголовок (1–3 строки) и строку хэштегов на плашку снизу."""
+def _draw_story_text(img, title: str) -> None:
+    """Наложить только текст (1–3 строки) на плашку снизу. Хэштеги НЕ рисуем."""
     from PIL import ImageDraw
 
-    if not (title or tags):
+    if not title:
         return
     W, H = img.size
     draw = ImageDraw.Draw(img, "RGBA")
     margin = int(W * 0.06)
     title_font = _font(54)
-    tag_font = _font(34)
 
-    title_lines = _wrap(draw, title, title_font, W - 2 * margin, 3) if title else []
-    tag_line = " ".join("#" + t.lstrip("#") for t in tags[:5]) if tags else ""
+    title_lines = _wrap(draw, title, title_font, W - 2 * margin, 3)
+    if not title_lines:
+        return
 
     line_h = int(54 * 1.25)
-    tag_h = int(34 * 1.3) if tag_line else 0
-    block_h = len(title_lines) * line_h + tag_h
+    block_h = len(title_lines) * line_h
     pad = int(W * 0.05)
     # плашка занимает только нижнюю часть, не перекрывая всю картинку
     top = H - block_h - pad * 2 - int(H * 0.06)
     top = max(top, int(H * 0.45))
-    # градиентная затемняющая полоса для читаемости
-    band = draw  # рисуем прямоугольник с альфой
-    band.rectangle([0, top, W, H], fill=(0, 0, 0, 140))
+    draw.rectangle([0, top, W, H], fill=(0, 0, 0, 140))  # затемнение для читаемости
 
     y = top + pad
     for ln in title_lines:
         draw.text((margin, y), ln, font=title_font, fill=(255, 255, 255, 255))
         y += line_h
-    if tag_line:
-        draw.text((margin, y + 6), tag_line, font=tag_font, fill=(120, 200, 255, 255))
 
 
 def prepare(url: str | None, out_path: Path, kind: str,
-            overlay_title: str = "", overlay_tags: list[str] | None = None) -> Path | None:
+            overlay_title: str = "") -> Path | None:
     """Скачать `url`, привести к формату и (для сториз) наложить текст. → JPEG или None."""
     from app.util import clean_image_url
 
@@ -123,9 +118,9 @@ def prepare(url: str | None, out_path: Path, kind: str,
     fg.thumbnail((tw, th), Image.LANCZOS)
     bg.paste(fg, ((tw - fg.width) // 2, (th - fg.height) // 2))
 
-    if kind == "story" and (overlay_title or overlay_tags):
+    if kind == "story" and overlay_title:
         try:
-            _draw_story_text(bg, overlay_title, overlay_tags or [])
+            _draw_story_text(bg, overlay_title)
         except Exception:
             pass  # текст — не критично; сторис всё равно опубликуем
 

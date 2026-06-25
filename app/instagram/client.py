@@ -27,6 +27,7 @@ class IGClient:
         except Exception as exc:  # pragma: no cover - зависит от окружения
             raise IGError(f"instagrapi не установлен: {exc}")
         self.account = account
+        self.music_note = ""  # причина, по которой музыка не добавилась (для диагностики)
         self.cl = Client()
         self.cl.delay_range = [1, 3]  # человеческие задержки между запросами
         if account.session_json:
@@ -112,17 +113,21 @@ class IGClient:
                 links = [StoryLink(webUri=link.strip())]
             except Exception:
                 links = []
+        self.music_note = ""
         if with_music:
             try:
                 track = self._pick_track()
-                if track is not None:
+                if track is None:
+                    self.music_note = "музыка: трек не найден (search_music пуст)"
+                else:
                     story = self.cl.photo_upload_to_story_with_music(
                         Path(path), caption=caption, track=track, links=links,
                         duration=15.0,
                     )
                     return str(getattr(story, "pk", "") or "")
-            except Exception:
-                pass  # откат на обычную сторис без музыки
+            except Exception as exc:
+                # запоминаем причину и публикуем обычную сторис без музыки
+                self.music_note = f"музыка не удалась: {type(exc).__name__}: {str(exc)[:160]}"
         try:
             story = self.cl.photo_upload_to_story(
                 Path(path), caption=caption, links=links

@@ -642,6 +642,8 @@ def ig_publish_post(post_id: int, kind: str = Form("post")) -> RedirectResponse:
         post.ig_media_pk = pk
         post.published_at = datetime.now(timezone.utc)
         post.publish_note = "опубликовано вручную"
+        if as_kind == "story" and getattr(igc, "music_note", ""):
+            post.publish_note += " | " + igc.music_note
         s.add(post)
         _persist_session(s, acc, igc, "ok")
     return _redirect(f"/instagram/{account_id}", f"Опубликовано ({as_kind})")

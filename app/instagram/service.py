@@ -275,29 +275,26 @@ def login_account(account_id: int, verification_code: str = "") -> dict:
         return {"ok": True, "note": "Вход выполнен"}
 
 
-def _story_overlay(post: IGPost) -> tuple[str, list[str]]:
-    """Текст для наложения на сториз: пара предложений + хэштеги (из подписи)."""
+def _story_overlay(post: IGPost) -> str:
+    """Текст для наложения на сториз: пара предложений из подписи (БЕЗ хэштегов)."""
     cap = post.caption or ""
-    tags = re.findall(r"#(\w+)", cap)
     body = re.sub(r"#\w+", "", cap)  # убрать хэштеги из тела
     body = re.sub(r"\s+", " ", body).strip()
     title = body or post.source_title or ""
-    # пара предложений / до ~180 символов
     text = ""
     for sn in re.split(r"(?<=[.!?])\s+", title):
         if text and len(text) + len(sn) > 180:
             break
         text = (text + " " + sn).strip()
-    return text[:200], tags[:5]
+    return text[:200]
 
 
 def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str:
     """Подготовить медиа и опубликовать (пост или сториз с текстом+музыкой). → pk."""
     if as_kind == "story":
-        title, tags = _story_overlay(post)
         img = ig_media.prepare(
             post.image_url, _media_dir() / f"{post.id}-story.jpg", "story",
-            overlay_title=title, overlay_tags=tags,
+            overlay_title=_story_overlay(post),
         )
         if not img:
             raise IGError("нет/битая картинка")
@@ -358,6 +355,8 @@ def run_ig_publish(account_id: int, as_kind: str, count: int = 1) -> dict:
             post.ig_media_pk = pk
             post.published_at = _now()
             post.publish_note = "опубликовано"
+            if as_kind == "story" and igc.music_note:
+                post.publish_note += " | " + igc.music_note
             s.add(post)
             published += 1
         s.commit()
