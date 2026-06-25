@@ -125,6 +125,7 @@ def save_site(
     collect_time: str = Form("09:00"),
     publish_days: list[str] = Form(default=[]),
     publish_time: str = Form("09:00"),
+    collect_limit: int = Form(3),
     publish_per_run: int = Form(3),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
@@ -145,6 +146,7 @@ def save_site(
         site.collect_time = collect_time.strip() or "09:00"
         site.publish_days = ",".join(c for c in publish_days if c in allowed_d)
         site.publish_time = publish_time.strip() or "09:00"
+        site.collect_limit = max(1, collect_limit)
         site.publish_per_run = max(1, publish_per_run)
         site.enabled = enabled
         s.add(site)

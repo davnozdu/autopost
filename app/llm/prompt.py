@@ -73,6 +73,34 @@ def parse_article(raw: str, fallback_image: str | None = None) -> dict:
     }
 
 
+def build_select_prompt(items: list[dict], limit: int, context: str) -> tuple[str, str]:
+    """Промпт отбора самых стоящих новостей из списка кандидатов."""
+    lines = [f"{it['i']}. {it['title']} — {it['summary'][:160]}" for it in items]
+    system = (
+        f"Jsi editor zpravodajství webu '{context}'. Z níže uvedených zpráv vyber "
+        f"{limit} nejzajímavějších a nejrelevantnějších k publikaci (aktuálnost, "
+        f"přínos pro čtenáře, vyhni se duplicitám). "
+        'Vrať POUZE JSON: {"selected":[čísla zpráv]} bez dalšího textu.'
+    )
+    user = "Zprávy:\n" + "\n".join(lines)
+    return system, user
+
+
+def parse_selection(raw: str, n: int, limit: int) -> list[int] | None:
+    data = _extract_json(raw)
+    if not data or "selected" not in data:
+        return None
+    idx = []
+    for x in data["selected"]:
+        try:
+            i = int(x)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= i < n and i not in idx:
+            idx.append(i)
+    return idx[:limit] or None
+
+
 def build_translate_prompt(content: dict, target_name: str) -> tuple[str, str]:
     """Промпт перевода статьи в целевой язык с сохранением HTML-структуры."""
     system = (

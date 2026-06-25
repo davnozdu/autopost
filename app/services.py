@@ -14,12 +14,18 @@ from app.config import get_settings
 from app.db.models import AppConfig, Article, Site, Source
 from app.db.session import engine
 from app.llm.client import LLMClient, LLMError
-from app.llm.prompt import build_prompt, parse_article
+from app.llm.prompt import (
+    build_prompt,
+    build_select_prompt,
+    parse_article,
+    parse_selection,
+)
 from app.scraper.extract import extract_image, extract_text, fetch_html
 from app.scraper.rss import peek_feed
 from app.util import lang_segment, slugify_latin
 
-MAX_PER_COLLECT = 10  # лимит статей за один прогон сбора (защита от лавины/затрат)
+MAX_PER_COLLECT = 10  # верхний предел статей за прогон (защита)
+CANDIDATE_POOL = 40   # сколько кандидатов рассматривать для отбора
 COLLECT_WORKERS = 4   # параллельных потоков загрузки+генерации
 
 _WEEKDAY_IDX = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
@@ -115,6 +121,24 @@ def _fetch_full(link: str, image: str | None, summary: str) -> tuple[str, str | 
     return text, img
 
 
+def _select_candidates(client, config, candidates: list[dict], limit: int, context: str) -> list[dict]:
+    """Выбрать limit самых стоящих новостей через LLM; при сбое — первые limit."""
+    items = [
+        {"i": i, "title": e.get("title", ""), "summary": e.get("summary", "")}
+        for i, e in enumerate(candidates)
+    ]
+    try:
+        system, user = build_select_prompt(items, limit, context)
+        res = client.chat(system, user, json_mode=True, temperature=0.2,
+                          model=(config.llm_model or None))
+        idx = parse_selection(res.text, len(candidates), limit)
+    except LLMError:
+        idx = None
+    if not idx:
+        return candidates[:limit]
+    return [candidates[i] for i in idx]
+
+
 def collect_and_generate(site_id: int) -> dict:
     """Собрать со всех источников сайта, сгенерировать статьи, разнести по датам."""
     with Session(engine) as s:
@@ -143,9 +167,16 @@ def collect_and_generate(site_id: int) -> dict:
                 if s.exec(select(Article).where(Article.source_url == link)).first():
                     continue
                 candidates.append(e)
+        candidates = candidates[:CANDIDATE_POOL]
 
-        # 2) генерация — параллельно (загрузка статьи + вызов LLM по сети)
-        batch = candidates[:MAX_PER_COLLECT]
+        # 2) отбор: если кандидатов больше лимита — выбрать лучшие через LLM
+        limit = max(1, site.collect_limit)
+        if len(candidates) > limit:
+            batch = _select_candidates(client, config, candidates, limit, site.name)
+        else:
+            batch = candidates
+
+        # 3) генерация — параллельно (загрузка статьи + вызов LLM по сети)
 
         def _make(e: dict):
             text, img = _fetch_full(e["link"], e.get("image"), e.get("summary", ""))

@@ -70,8 +70,12 @@
     <label>Время публикации</label>
     <input type="time" name="publish_time" value="{{ site.publish_time }}" style="width:auto">
 
-    <label>Публиковать за один день (шт.)</label>
-    <input type="number" name="publish_per_run" value="{{ site.publish_per_run }}" min="1" style="width:auto">
+    <div style="display:flex;gap:12px">
+      <div><label>Готовить за сбор (шт.)</label>
+        <input type="number" name="collect_limit" value="{{ site.collect_limit }}" min="1" style="width:auto"></div>
+      <div><label>Публиковать за раз (шт.)</label>
+        <input type="number" name="publish_per_run" value="{{ site.publish_per_run }}" min="1" style="width:auto"></div>
+    </div>
 
     <label style="display:flex;gap:8px;align-items:center;margin-top:14px">
       <input type="checkbox" name="enabled" value="true" style="width:auto"

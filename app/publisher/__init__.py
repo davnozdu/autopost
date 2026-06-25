@@ -5,6 +5,7 @@ GitHub после push сам заливает по FTP. Листинг/RSS ст
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlmodel import Session
 
@@ -53,21 +54,34 @@ def publish(article: Article) -> dict:
     }
     targets = _target_langs(article, site)
     client = LLMClient()
+    errors = []
 
-    published_urls, errors = [], []
+    # 1) переводы для не-основных языков — параллельно (это самая долгая часть)
+    def _translate(seg: str):
+        try:
+            system, user = build_translate_prompt(base_content, lang_name(seg))
+            res = client.chat(system, user, json_mode=True, temperature=0.3,
+                              model=(config.llm_model or None))
+            return seg, parse_translation(res.text, base_content), None
+        except LLMError as exc:
+            return seg, None, f"{seg}: перевод не удался ({str(exc)[:80]})"
+
+    content_by_seg = {primary: base_content}
+    others = [seg for seg in targets if seg != primary]
+    if others:
+        with ThreadPoolExecutor(max_workers=min(4, len(others))) as pool:
+            for seg, content, err in pool.map(_translate, others):
+                if err:
+                    errors.append(err)
+                else:
+                    content_by_seg[seg] = content
+
+    # 2) рендер + запись в репозиторий (последовательно: один branch → без конфликтов)
+    published_urls = []
     for seg in targets:
-        # контент: оригинал для языка генерации, иначе перевод
-        if seg == primary:
-            content = base_content
-        else:
-            try:
-                system, user = build_translate_prompt(base_content, lang_name(seg))
-                res = client.chat(system, user, json_mode=True, temperature=0.3,
-                                  model=(config.llm_model or None))
-                content = parse_translation(res.text, base_content)
-            except LLMError as exc:
-                errors.append(f"{seg}: перевод не удался ({str(exc)[:80]})")
-                continue
+        content = content_by_seg.get(seg)
+        if content is None:
+            continue
         try:
             html, meta, path_base = render_page(
                 site, lang=seg, slug=article.slug, content=content,

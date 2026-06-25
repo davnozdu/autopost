@@ -65,6 +65,7 @@ class Site(SQLModel, table=True):
     collect_time: str = "09:00"
     publish_days: str = "wed,sun"
     publish_time: str = "09:00"
+    collect_limit: int = 3    # сколько статей готовить за один сбор (после отбора)
     publish_per_run: int = 3  # сколько публиковать за один публикационный день
     enabled: bool = True
     created_at: datetime = Field(default_factory=_now)
