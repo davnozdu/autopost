@@ -5,6 +5,10 @@
 #   mkdir -p /share/CACHEDEV3_DATA/autopost/data /share/CACHEDEV3_DATA/autopost/site
 #
 # Откроется на http://<адрес-NAS>:8778 — при первом входе задайте пароль.
+#
+# Instagram: логин/расписание задаются во вкладке «Instagram» (в БД, не здесь).
+# Обновление instagrapi — кнопкой в админке: ставится в data/pylibs (том ниже),
+# поэтому переживает пересоздание контейнера, образ пересобирать не нужно.
 
 services:
   autopost:

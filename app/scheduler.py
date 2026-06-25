@@ -14,8 +14,9 @@ from sqlmodel import Session, select
 
 from app import services
 from app.config import get_settings
-from app.db.models import Site
+from app.db.models import IGAccount, Site
 from app.db.session import engine
+from app.instagram import service as ig_service
 
 _scheduler: BackgroundScheduler | None = None
 
@@ -47,6 +48,9 @@ def reload_jobs() -> None:
     _scheduler.remove_all_jobs()
     with Session(engine) as s:
         sites = s.exec(select(Site).where(Site.enabled == True)).all()  # noqa: E712
+        ig_accounts = s.exec(
+            select(IGAccount).where(IGAccount.enabled == True)  # noqa: E712
+        ).all()
     tz = _tz()
     for site in sites:
         ch, cm = services._parse_hhmm(site.collect_time)
@@ -63,6 +67,32 @@ def reload_jobs() -> None:
                     services.run_publish,
                     CronTrigger(day_of_week=site.publish_days, hour=ph, minute=pm, timezone=tz),
                     args=[site.id], id=f"publish-{site.id}", replace_existing=True,
+                )
+        except Exception:
+            continue
+
+    # Instagram-аккаунты: ежедневный сбор + 1 пост/день + сториз по временам.
+    for acc in ig_accounts:
+        try:
+            cch, ccm = services._parse_hhmm(acc.collect_time)
+            _scheduler.add_job(
+                ig_service.collect_account,
+                CronTrigger(hour=cch, minute=ccm, timezone=tz),
+                args=[acc.id], id=f"ig-collect-{acc.id}", replace_existing=True,
+            )
+            pph, ppm = services._parse_hhmm(acc.post_time)
+            _scheduler.add_job(
+                ig_service.run_ig_publish,
+                CronTrigger(hour=pph, minute=ppm, timezone=tz),
+                args=[acc.id, "post"], id=f"ig-post-{acc.id}", replace_existing=True,
+            )
+            for i, t in enumerate(x for x in acc.story_times.split(",") if x.strip()):
+                sh, sm = services._parse_hhmm(t.strip())
+                _scheduler.add_job(
+                    ig_service.run_ig_publish,
+                    CronTrigger(hour=sh, minute=sm, timezone=tz),
+                    args=[acc.id, "story"], id=f"ig-story-{acc.id}-{i}",
+                    replace_existing=True,
                 )
         except Exception:
             continue

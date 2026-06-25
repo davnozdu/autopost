@@ -13,10 +13,14 @@ from starlette.requests import Request
 from app import scheduler, services
 from app.config import get_settings
 from app.db.models import (
+    IG_SOURCE_KINDS,
     LANGUAGES,
     WEEKDAYS,
     AppConfig,
     Article,
+    IGAccount,
+    IGPost,
+    IGSource,
     Site,
     Source,
 )
@@ -361,6 +365,278 @@ def delete_article(article_id: int) -> RedirectResponse:
             s.delete(art)
             s.commit()
     return _redirect("/preview", "Статья удалена")
+
+
+# ── Instagram: аккаунты ───────────────────────────────────────────────
+IG_STATUS_LABELS = {
+    "draft": "Черновики",
+    "scheduled": "В пуле",
+    "published": "Опубликовано",
+    "failed": "Ошибки",
+}
+
+
+@router.get("/instagram", response_class=HTMLResponse)
+def ig_accounts_page(request: Request, msg: str = "", check: int = 0) -> HTMLResponse:
+    from app.instagram.updater import installed_version, latest_version
+
+    with Session(engine) as s:
+        accounts = s.exec(select(IGAccount).order_by(IGAccount.id)).all()
+    ig_ver = {
+        "installed": installed_version(),
+        # PyPI дёргаем только по запросу (кнопка «Проверить»), чтобы не тормозить страницу
+        "latest": latest_version() if check else None,
+    }
+    return templates.TemplateResponse(
+        request, "ig_accounts.html",
+        {"accounts": accounts, "msg": msg, "ig_ver": ig_ver},
+    )
+
+
+@router.post("/instagram/update")
+def ig_update(version: str = Form("")) -> RedirectResponse:
+    from app.instagram.updater import update
+
+    res = update(version.strip())
+    if res.get("ok"):
+        msg = (f"instagrapi обновлён до {res.get('version')}. "
+               "Если публикация уже шла — перезапустите контейнер.")
+    else:
+        msg = f"Не удалось обновить: {res.get('log', '')[-160:]}"
+    return _redirect("/instagram", msg)
+
+
+@router.post("/instagram")
+def ig_add_account(name: str = Form(...)) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = IGAccount(name=name.strip())
+        s.add(acc)
+        s.commit()
+        s.refresh(acc)
+    scheduler.reload_jobs()
+    return _redirect(f"/instagram/{acc.id}", "Аккаунт создан — заполните настройки")
+
+
+@router.get("/instagram/{account_id}", response_class=HTMLResponse)
+def ig_account_page(request: Request, account_id: int, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        acc = s.get(IGAccount, account_id)
+        if not acc:
+            return _redirect("/instagram", "Аккаунт не найден")
+        sources = s.exec(
+            select(IGSource).where(IGSource.account_id == account_id).order_by(IGSource.id)
+        ).all()
+        posts = s.exec(
+            select(IGPost)
+            .where(IGPost.account_id == account_id)
+            .order_by(IGPost.created_at.desc())
+        ).all()
+    sections = {"draft": [], "scheduled": [], "published": [], "failed": []}
+    for p in posts:
+        sections.get(p.status, sections["draft"]).append(p)
+    runs = [j for j in scheduler.jobs_info()
+            if j["id"].startswith("ig-")
+            and j["id"].split("-")[2:3] == [str(account_id)]]
+    return templates.TemplateResponse(
+        request,
+        "ig_account.html",
+        {
+            "acc": acc,
+            "sources": sources,
+            "kinds": IG_SOURCE_KINDS,
+            "sections": sections,
+            "labels": IG_STATUS_LABELS,
+            "runs": runs,
+            "msg": msg,
+        },
+    )
+
+
+@router.post("/instagram/{account_id}")
+def ig_save_account(
+    account_id: int,
+    name: str = Form(...),
+    username: str = Form(""),
+    password: str = Form(""),
+    proxy: str = Form(""),
+    link_url: str = Form(""),
+    collect_time: str = Form("07:00"),
+    post_time: str = Form("11:00"),
+    story_times: str = Form("13:00,17:00,21:00"),
+    collect_limit: int = Form(8),
+    enabled: bool = Form(False),
+) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = s.get(IGAccount, account_id)
+        if not acc:
+            return _redirect("/instagram", "Аккаунт не найден")
+        acc.name = name.strip()
+        acc.username = username.strip()
+        if password.strip():
+            acc.password = password.strip()
+        acc.proxy = proxy.strip()
+        acc.link_url = link_url.strip()
+        acc.collect_time = collect_time.strip() or "07:00"
+        acc.post_time = post_time.strip() or "11:00"
+        acc.story_times = ",".join(
+            t.strip() for t in story_times.split(",") if t.strip()
+        ) or "13:00,17:00,21:00"
+        acc.collect_limit = max(1, collect_limit)
+        acc.enabled = enabled
+        s.add(acc)
+        s.commit()
+    scheduler.reload_jobs()
+    return _redirect(f"/instagram/{account_id}", "Настройки аккаунта сохранены")
+
+
+@router.post("/instagram/{account_id}/delete")
+def ig_delete_account(account_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = s.get(IGAccount, account_id)
+        if acc:
+            for src in s.exec(
+                select(IGSource).where(IGSource.account_id == account_id)
+            ).all():
+                s.delete(src)
+            for p in s.exec(
+                select(IGPost).where(IGPost.account_id == account_id)
+            ).all():
+                s.delete(p)
+            s.delete(acc)
+            s.commit()
+    scheduler.reload_jobs()
+    return _redirect("/instagram", "Аккаунт удалён")
+
+
+@router.post("/instagram/{account_id}/login")
+def ig_login(account_id: int, verification_code: str = Form("")) -> RedirectResponse:
+    from app.instagram.service import login_account
+
+    res = login_account(account_id, verification_code.strip())
+    if res.get("ok"):
+        msg = "Вход выполнен"
+    elif res.get("challenge"):
+        msg = "Нужен код подтверждения — введите его и повторите вход"
+    else:
+        msg = f"Не удалось войти: {res.get('note', '')[:120]}"
+    return _redirect(f"/instagram/{account_id}", msg)
+
+
+@router.post("/instagram/{account_id}/collect")
+def ig_collect_now(account_id: int) -> RedirectResponse:
+    from app.instagram.service import collect_account
+
+    res = collect_account(account_id)
+    return _redirect(f"/instagram/{account_id}",
+                     f"Собрано в пул: {res.get('created', 0)}")
+
+
+@router.post("/instagram/{account_id}/publish")
+def ig_publish_now(account_id: int, kind: str = Form("post")) -> RedirectResponse:
+    from app.instagram.service import run_ig_publish
+
+    as_kind = "story" if kind == "story" else "post"
+    res = run_ig_publish(account_id, as_kind, count=1)
+    return _redirect(f"/instagram/{account_id}",
+                     f"{res.get('note', '')} (опубликовано {res.get('published', 0)})")
+
+
+# ── Instagram: источники и посты ──────────────────────────────────────
+@router.post("/instagram/{account_id}/sources")
+def ig_add_source(
+    account_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    kind: str = Form("rss"),
+) -> RedirectResponse:
+    allowed = {c for c, _ in IG_SOURCE_KINDS}
+    with Session(engine) as s:
+        s.add(IGSource(
+            account_id=account_id, name=name.strip(), url=url.strip(),
+            kind=kind if kind in allowed else "rss",
+        ))
+        s.commit()
+    return _redirect(f"/instagram/{account_id}", "Источник добавлен")
+
+
+@router.post("/ig-sources/{source_id}/delete")
+def ig_delete_source(source_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(IGSource, source_id)
+        account_id = src.account_id if src else 0
+        if src:
+            s.delete(src)
+            s.commit()
+    return _redirect(f"/instagram/{account_id}", "Источник удалён")
+
+
+@router.post("/ig-posts/{post_id}")
+def ig_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
+    with Session(engine) as s:
+        post = s.get(IGPost, post_id)
+        if not post:
+            return _redirect("/instagram", "Не найдено")
+        post.caption = caption
+        s.add(post)
+        s.commit()
+        account_id = post.account_id
+    return _redirect(f"/instagram/{account_id}", "Подпись сохранена")
+
+
+@router.post("/ig-posts/{post_id}/publish")
+def ig_publish_post(post_id: int, kind: str = Form("post")) -> RedirectResponse:
+    from app.instagram import media as ig_media
+    from app.instagram.client import IGChallengeRequired, IGClient, IGError
+    from app.instagram.service import _media_dir, _persist_session
+
+    as_kind = "story" if kind == "story" else "post"
+    with Session(engine) as s:
+        post = s.get(IGPost, post_id)
+        if not post:
+            return _redirect("/instagram", "Не найдено")
+        account_id = post.account_id
+        acc = s.get(IGAccount, account_id)
+        try:
+            igc = IGClient(acc)
+            igc.ensure_login()
+        except IGChallengeRequired as exc:
+            return _redirect(f"/instagram/{account_id}",
+                             f"Нужен код подтверждения: {str(exc)[:100]}")
+        except IGError as exc:
+            return _redirect(f"/instagram/{account_id}", f"Ошибка входа: {str(exc)[:100]}")
+        img = ig_media.prepare(post.image_url, _media_dir() / f"{post.id}-{as_kind}.jpg", as_kind)
+        if not img:
+            return _redirect(f"/instagram/{account_id}", "Нет/битая картинка")
+        try:
+            if as_kind == "story":
+                pk = igc.upload_story(img, caption=post.source_title or "", link=post.link_url or "")
+            else:
+                pk = igc.upload_photo(img, post.caption or "")
+        except IGError as exc:
+            post.status = "failed"
+            post.publish_note = str(exc)[:300]
+            s.add(post)
+            s.commit()
+            return _redirect(f"/instagram/{account_id}", f"Ошибка: {str(exc)[:100]}")
+        post.status = "published"
+        post.kind = as_kind
+        post.ig_media_pk = pk
+        post.published_at = datetime.now(timezone.utc)
+        post.publish_note = "опубликовано вручную"
+        s.add(post)
+        _persist_session(s, acc, igc, "ok")
+    return _redirect(f"/instagram/{account_id}", f"Опубликовано ({as_kind})")
+
+
+@router.post("/ig-posts/{post_id}/delete")
+def ig_delete_post(post_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        post = s.get(IGPost, post_id)
+        account_id = post.account_id if post else 0
+        if post:
+            s.delete(post)
+            s.commit()
+    return _redirect(f"/instagram/{account_id}", "Удалено")
 
 
 # ── Глобальные настройки LLM ──────────────────────────────────────────

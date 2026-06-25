@@ -108,6 +108,53 @@ def parse_selection(raw: str, n: int, limit: int) -> list[int] | None:
     return idx[:limit] or None
 
 
+def build_ig_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
+    """Промпт подписи для Instagram-поста по внешней новости (группа rss).
+
+    Возвращает строгий JSON {caption, hashtags}. Тон — живой, как у человека,
+    по тем же общим инструкциям, но в формате соцсети (коротко, с эмодзи).
+    """
+    rules = [
+        f"Piš výhradně v jazyce: {config.language}.",
+        "Formát: poutavý popisek pro Instagram, 2–4 krátké odstavce, "
+        "lehké a lidské podání, klidně 1–3 vhodné emoji (ne přehnaně).",
+        "Bez klišé a marketingového balastu; první věta musí zaujmout.",
+        "NEzmiňuj zdroj a nevkládej do textu žádné odkazy.",
+    ]
+    if config.llm_instructions.strip():
+        rules.append(config.llm_instructions.strip())
+    rules.append(
+        "Vrať POUZE validní JSON bez dalšího textu, přesně v tomto tvaru:\n"
+        '{"caption": "...", "hashtags": ["...", "..."]}\n'
+        "- caption: text popisku bez hashtagů;\n"
+        "- hashtags: 5–12 relevantních hashtagů bez znaku #, malými písmeny."
+    )
+    system = "Jsi zkušený social media manažer. " + " ".join(rules)
+    user = (
+        f"Titulek zdroje: {news.get('title', '')}\n\n"
+        f"Text zdroje:\n{news.get('text', '')}"
+    )
+    return system, user
+
+
+def parse_ig_caption(raw: str, fallback_text: str = "") -> str:
+    """Собрать готовую подпись (текст + хэштеги) из JSON-ответа модели."""
+    data = _extract_json(raw) or {}
+    caption = (data.get("caption") or "").strip()
+    if not caption:
+        caption = (fallback_text or raw or "").strip()
+    tags = data.get("hashtags")
+    if isinstance(tags, list):
+        clean = []
+        for t in tags:
+            t = str(t).strip().lstrip("#").replace(" ", "")
+            if t:
+                clean.append("#" + t)
+        if clean:
+            caption = caption.rstrip() + "\n\n" + " ".join(clean[:12])
+    return caption
+
+
 def build_translate_prompt(content: dict, target_name: str) -> tuple[str, str]:
     """Промпт перевода статьи в целевой язык с сохранением HTML-структуры."""
     system = (

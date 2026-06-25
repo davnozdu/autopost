@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ acc.name }} — Instagram{% endblock %}
+{% block content %}
+
+<p><a href="/instagram">← Все аккаунты</a></p>
+<h2 style="font-size:1.15rem;margin-bottom:4px">{{ acc.name }}</h2>
+
+{% if acc.login_status %}
+<div class="card" style="border-color:{% if acc.login_status=='ok' %}#a7f3d0{% elif acc.login_status=='challenge' %}#fde68a{% else %}#fecaca{% endif %}">
+  <strong>Состояние входа:</strong> {{ acc.login_status }}
+  {% if acc.login_note %}<div class="muted" style="margin-top:4px">{{ acc.login_note }}</div>{% endif %}
+</div>
+{% endif %}
+
+<!-- Настройки аккаунта -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Настройки аккаунта</h3>
+  <form method="post" action="/instagram/{{ acc.id }}">
+    <label>Название</label>
+    <input type="text" name="name" value="{{ acc.name }}" required>
+    <label>Логин Instagram</label>
+    <input type="text" name="username" value="{{ acc.username }}" placeholder="username">
+    <label>Пароль {% if acc.password %}<span class="muted">(оставьте пустым, чтобы не менять)</span>{% endif %}</label>
+    <input type="text" name="password" value="" placeholder="{% if acc.password %}••••••••{% else %}пароль{% endif %}">
+    <label>Прокси <span class="muted">(опц., рекомендуется для стабильности)</span></label>
+    <input type="text" name="proxy" value="{{ acc.proxy }}" placeholder="http://user:pass@host:port">
+    <label>Ссылка на сайт <span class="muted">(добавляется в подпись и в стикер сториз)</span></label>
+    <input type="url" name="link_url" value="{{ acc.link_url }}" placeholder="https://remontandroid.cz">
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <label>Время сбора</label>
+        <input type="text" name="collect_time" value="{{ acc.collect_time }}" placeholder="07:00">
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label>Время поста</label>
+        <input type="text" name="post_time" value="{{ acc.post_time }}" placeholder="11:00">
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label>Размер пула</label>
+        <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
+      </div>
+    </div>
+    <label>Времена сториз <span class="muted">(через запятую, 2–3 в день)</span></label>
+    <input type="text" name="story_times" value="{{ acc.story_times }}" placeholder="13:00,17:00,21:00">
+
+    <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
+    <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
+<!-- Вход -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Вход в Instagram</h3>
+  <p class="muted" style="margin-top:0">Сессия сохраняется, чтобы не входить каждый раз. Если запросят код (2FA/проверка) — введите его и повторите.</p>
+  <form method="post" action="/instagram/{{ acc.id }}/login" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <div style="flex:1;min-width:160px">
+      <label style="margin-top:0">Код подтверждения (если нужен)</label>
+      <input type="text" name="verification_code" placeholder="6 цифр / резервный код">
+    </div>
+    <button class="primary" type="submit">Войти / проверить</button>
+  </form>
+</div>
+
+<!-- Действия -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Действия</h3>
+  <div class="actions" style="flex-wrap:wrap">
+    <form method="post" action="/instagram/{{ acc.id }}/collect">
+      <button class="primary" type="submit">Собрать в пул</button>
+    </form>
+    <form method="post" action="/instagram/{{ acc.id }}/publish">
+      <input type="hidden" name="kind" value="post">
+      <button type="submit">Опубликовать пост сейчас</button>
+    </form>
+    <form method="post" action="/instagram/{{ acc.id }}/publish">
+      <input type="hidden" name="kind" value="story">
+      <button type="submit">Опубликовать сториз сейчас</button>
+    </form>
+  </div>
+  {% if runs %}
+  <p class="muted" style="margin-bottom:0">Ближайшие запуски:
+    {% for r in runs %}<br>{{ r.id }} → {{ r.next_run or "—" }}{% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+<!-- Источники -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">RSS-источники</h3>
+  <form method="post" action="/instagram/{{ acc.id }}/sources">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:140px">
+        <label style="margin-top:0">Название</label>
+        <input type="text" name="name" required placeholder="remontandroid">
+      </div>
+      <div style="flex:2;min-width:180px">
+        <label style="margin-top:0">RSS URL</label>
+        <input type="url" name="url" required placeholder="https://...">
+      </div>
+      <div style="min-width:200px">
+        <label style="margin-top:0">Группа</label>
+        <select name="kind" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
+          {% for code, label in kinds %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:10px"><button class="primary" type="submit">Добавить источник</button></div>
+  </form>
+
+  {% if sources %}
+  <table style="margin-top:12px">
+    {% for src in sources %}
+    <tr>
+      <td><strong>{{ src.name }}</strong><br><span class="muted">{{ src.url }}</span></td>
+      <td>{% if src.kind == 'own' %}свои сайты{% else %}внешний (LLM){% endif %}</td>
+      <td>
+        <form method="post" action="/ig-sources/{{ src.id }}/delete">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Источников пока нет.</p>
+  {% endif %}
+</div>
+
+<!-- Пул материалов -->
+<h3 style="font-size:1rem">Пул материалов</h3>
+{% for status, label in [('scheduled','В пуле'), ('failed','Ошибки'), ('published','Опубликовано')] %}
+  {% set items = sections[status] %}
+  {% if items %}
+  <h4 style="margin:14px 0 6px">{{ label }} ({{ items|length }})</h4>
+    {% for p in items %}
+    <div class="card">
+      <div style="display:flex;gap:12px">
+        {% if p.image_url %}<img class="thumb" src="{{ p.image_url }}" alt="" style="max-width:120px">{% endif %}
+        <div style="flex:1">
+          <strong>{{ p.source_title or '(без названия)' }}</strong>
+          {% if p.kind %}<span class="muted"> · {{ p.kind }}</span>{% endif %}
+          {% if p.media_kind == 'own' %}<span class="muted"> · свой</span>{% endif %}
+          {% if p.publish_note %}<div class="muted" style="margin-top:2px">{{ p.publish_note }}</div>{% endif %}
+        </div>
+      </div>
+      {% if status != 'published' %}
+      <form method="post" action="/ig-posts/{{ p.id }}">
+        <label>Подпись</label>
+        <textarea name="caption">{{ p.caption }}</textarea>
+        <div class="actions" style="margin-top:8px;flex-wrap:wrap">
+          <button class="primary" type="submit">Сохранить подпись</button>
+        </div>
+      </form>
+      <div class="actions" style="margin-top:8px;flex-wrap:wrap">
+        <form method="post" action="/ig-posts/{{ p.id }}/publish">
+          <input type="hidden" name="kind" value="post">
+          <button type="submit">Опубликовать постом</button>
+        </form>
+        <form method="post" action="/ig-posts/{{ p.id }}/publish">
+          <input type="hidden" name="kind" value="story">
+          <button type="submit">Опубликовать сториз</button>
+        </form>
+        <form method="post" action="/ig-posts/{{ p.id }}/delete">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="muted" style="margin-top:6px">{{ p.caption[:200] }}</div>
+      <form method="post" action="/ig-posts/{{ p.id }}/delete" style="margin-top:6px">
+        <button class="danger" type="submit">Удалить из истории</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+{% if not sections['scheduled'] and not sections['failed'] and not sections['published'] %}
+  <p class="muted">Пул пуст. Нажмите «Собрать в пул».</p>
+{% endif %}
+
+{% endblock %}

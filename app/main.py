@@ -26,6 +26,11 @@ from app.web.routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Подложить обновлённый instagrapi из тома (если обновляли через админку),
+    # пока он ещё не импортирован.
+    from app.instagram.updater import ensure_on_path
+
+    ensure_on_path()
     init_db()
     scheduler.start()
     try:
@@ -34,7 +39,7 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown()
 
 
-app = FastAPI(title="autopost", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="autopost", version="0.5.0", lifespan=lifespan)
 
 # Сессии для входа (подписанная cookie). SECRET_KEY должен быть стабильным.
 app.add_middleware(SessionMiddleware, secret_key=get_settings().secret_key)

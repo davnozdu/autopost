@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Instagram{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Версия instagrapi</h3>
+  <p style="margin:0 0 8px">
+    Установлено: <strong>{{ ig_ver.installed or "не установлен" }}</strong>
+    {% if ig_ver.latest %}
+      · на PyPI: <strong>{{ ig_ver.latest }}</strong>
+      {% if ig_ver.installed == ig_ver.latest %}<span class="muted">— актуально</span>
+      {% else %}<span style="color:#b45309">— доступно обновление</span>{% endif %}
+    {% endif %}
+  </p>
+  <div class="actions" style="flex-wrap:wrap">
+    <a href="/instagram?check=1"><button type="button">Проверить PyPI</button></a>
+    <form method="post" action="/instagram/update"
+          onsubmit="return confirm('Обновить instagrapi до последней версии? Установится в том data/pylibs.')">
+      <button class="primary" type="submit">Обновить до последней</button>
+    </form>
+    <form method="post" action="/instagram/update" style="display:flex;gap:6px">
+      <input type="text" name="version" placeholder="напр. 2.16.25" style="width:140px">
+      <button type="submit">Поставить версию</button>
+    </form>
+  </div>
+  <p class="muted" style="margin-bottom:0">
+    Обновляется без пересборки образа: ставится в <code>data/pylibs</code> (монтируемый том),
+    переживает пересоздание контейнера. Если публикация уже шла — после обновления перезапустите контейнер.
+  </p>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Добавить аккаунт Instagram</h2>
+  <form method="post" action="/instagram">
+    <label>Название (для себя)</label>
+    <input type="text" name="name" required placeholder="Мой Instagram">
+    <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
+  </form>
+  <p class="muted" style="margin-bottom:0">
+    Внутри аккаунта задаются логин, расписание и RSS-источники (свои сайты и внешние).
+    1 пост в день + сториз по списку времён.
+  </p>
+</div>
+
+<h2 style="font-size:1.05rem">Аккаунты</h2>
+{% if accounts %}
+  {% for acc in accounts %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+      <strong>{{ acc.name }}{% if acc.username %} <span class="muted">@{{ acc.username }}</span>{% endif %}</strong>
+      <div class="actions">
+        <a href="/instagram/{{ acc.id }}"><button type="button" class="primary">Настроить</button></a>
+        <form method="post" action="/instagram/{{ acc.id }}/delete"
+              onsubmit="return confirm('Удалить аккаунт и его источники?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      {% if acc.enabled %}активен{% else %}выключен{% endif %}
+      · пост: {{ acc.post_time }} · сториз: {{ acc.story_times }}
+      {% if acc.login_status %} · вход: {{ acc.login_status }}{% endif %}
+    </p>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Пока нет аккаунтов. Создайте первый.</p>
+{% endif %}
+
+{% endblock %}

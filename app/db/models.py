@@ -115,6 +115,71 @@ class LLMCache(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+# ── Instagram (соцсети) ───────────────────────────────────────────────
+# Группы источников для Instagram:
+#   own — мои сайты: текст уже прогнан через LLM, нужно только перезалить +
+#         добавить ссылку на сайт (без повторной обработки LLM);
+#   rss — внешние RSS: материал гонится через LLM по текущим инструкциям и
+#         полностью готовится к публикации (подпись + хэштеги).
+IG_SOURCE_KINDS = [("own", "Мои сайты (готовый текст + ссылка)"),
+                   ("rss", "Внешние RSS (обработать через LLM)")]
+
+
+class IGAccount(SQLModel, table=True):
+    """Аккаунт Instagram для публикации (instagrapi) + расписание."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    username: str = ""
+    password: str = ""           # нужен для входа/перелогина (хранится как github_token)
+    session_json: str = ""       # сохранённая сессия instagrapi (чтобы не входить заново)
+    proxy: str = ""              # опциональный прокси (рекомендуется для стабильности)
+    link_url: str = ""           # ссылка на сайт: добавляется в подпись и в стикер сториз
+    # Расписание (ежедневно): 1 пост в день + сториз по списку времён.
+    collect_time: str = "07:00"  # когда готовить пул постов
+    post_time: str = "11:00"     # когда публиковать 1 пост в ленту
+    story_times: str = "13:00,17:00,21:00"  # времена публикации сториз (2–3 в день)
+    collect_limit: int = 8       # сколько материалов готовить за один сбор (пул)
+    enabled: bool = True
+    # Состояние входа (для админки): "", ok, challenge, error
+    login_status: str = ""
+    login_note: str = ""
+    last_login_at: datetime | None = None
+    created_at: datetime = Field(default_factory=_now)
+
+
+class IGSource(SQLModel, table=True):
+    """RSS-источник для Instagram-аккаунта. kind: own | rss."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    name: str
+    url: str
+    kind: str = "rss"            # own | rss
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=_now)
+
+
+class IGPost(SQLModel, table=True):
+    """Подготовленный материал для Instagram (пост в ленту или сториз)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(default=0, index=True)
+    source_url: str = Field(default="", index=True)
+    source_title: str = ""
+    media_kind: str = "rss"      # own | rss — откуда материал
+    kind: str = ""               # post | story — назначается при публикации
+    image_url: str | None = None
+    caption: str = ""            # готовая подпись (с хэштегами/ссылкой)
+    link_url: str = ""           # ссылка на сайт (для стикера сториз / текста поста)
+    status: str = "scheduled"    # draft | scheduled | published | failed
+    publish_at: datetime | None = None
+    published_at: datetime | None = None
+    publish_note: str = ""
+    ig_media_pk: str = ""        # id опубликованного медиа в Instagram
+    created_at: datetime = Field(default_factory=_now)
+
+
 class Article(SQLModel, table=True):
     """Подготовленная статья: текст, расписание и статус."""
 

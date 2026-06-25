@@ -170,6 +170,38 @@ def publish_article(article_id: int) -> dict:
     return result
 
 
+# ── Instagram ─────────────────────────────────────────────────────────
+@api_router.get("/ig/version", dependencies=[Depends(require_api_key)])
+def ig_version(check: bool = False) -> dict:
+    from app.instagram.updater import installed_version, latest_version
+
+    return {
+        "installed": installed_version(),
+        "latest": latest_version() if check else None,
+    }
+
+
+@api_router.post("/ig/update", dependencies=[Depends(require_api_key)])
+def ig_update(version: str = "") -> dict:
+    from app.instagram.updater import update
+
+    return update(version.strip())
+
+
+@api_router.post("/ig/{account_id}/collect", dependencies=[Depends(require_api_key)])
+def ig_collect(account_id: int) -> dict:
+    from app.instagram.service import collect_account
+
+    return collect_account(account_id)
+
+
+@api_router.post("/ig/{account_id}/publish", dependencies=[Depends(require_api_key)])
+def ig_publish(account_id: int, kind: str = "post") -> dict:
+    from app.instagram.service import run_ig_publish
+
+    return run_ig_publish(account_id, "story" if kind == "story" else "post", count=1)
+
+
 # ── LLM ───────────────────────────────────────────────────────────────
 @api_router.post("/llm/test", dependencies=[Depends(require_api_key)])
 def llm_test() -> dict:
