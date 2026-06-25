@@ -897,12 +897,31 @@ def tg_delete_post(post_id: int) -> RedirectResponse:
 
 # ── X (Twitter): аккаунты ─────────────────────────────────────────────
 @router.get("/x", response_class=HTMLResponse)
-def x_accounts_page(request: Request, msg: str = "") -> HTMLResponse:
+def x_accounts_page(request: Request, msg: str = "", check: int = 0) -> HTMLResponse:
+    from app.x.updater import installed_version, latest_version
+
     with Session(engine) as s:
         accounts = s.exec(select(XAccount).order_by(XAccount.id)).all()
+    tw_ver = {
+        "installed": installed_version(),
+        "latest": latest_version() if check else None,
+    }
     return templates.TemplateResponse(
-        request, "x_accounts.html", {"accounts": accounts, "msg": msg}
+        request, "x_accounts.html",
+        {"accounts": accounts, "msg": msg, "tw_ver": tw_ver},
     )
+
+
+@router.post("/x/update")
+def x_update(version: str = Form("")) -> RedirectResponse:
+    from app.x.updater import update
+
+    res = update(version.strip())
+    if res.get("ok"):
+        msg = f"twikit обновлён до {res.get('version')}. Если публикация шла — перезапустите контейнер."
+    else:
+        msg = f"Не удалось обновить: {res.get('log', '')[-160:]}"
+    return _redirect("/x", msg)
 
 
 @router.post("/x")
@@ -955,9 +974,8 @@ def x_account_page(request: Request, account_id: int, msg: str = "") -> HTMLResp
 def x_save_account(
     account_id: int,
     name: str = Form(...),
-    client_id: str = Form(""),
-    client_secret: str = Form(""),
-    refresh_token: str = Form(""),
+    auth_token: str = Form(""),
+    ct0: str = Form(""),
     language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_times: str = Form("11:00,18:00"),
@@ -973,13 +991,11 @@ def x_save_account(
             return _redirect("/x", "Аккаунт не найден")
         acc.name = name.strip()
         acc.jitter_min = max(0, min(30, jitter_min))
-        acc.monthly_limit = max(1, min(500, monthly_limit))
-        if client_id.strip():
-            acc.client_id = client_id.strip()
-        if client_secret.strip():
-            acc.client_secret = client_secret.strip()
-        if refresh_token.strip():
-            acc.refresh_token = refresh_token.strip()
+        acc.monthly_limit = max(1, min(2000, monthly_limit))
+        if auth_token.strip():
+            acc.auth_token = auth_token.strip()
+        if ct0.strip():
+            acc.ct0 = ct0.strip()
         acc.language = language if language in allowed_l else "ru"
         acc.collect_time = collect_time.strip() or "07:00"
         acc.post_times = ",".join(
@@ -1096,8 +1112,8 @@ def x_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
 
 @router.post("/x-posts/{post_id}/publish")
 def x_publish_post(post_id: int) -> RedirectResponse:
-    from app.x.client import XError
-    from app.x.service import _authorize, _send
+    from app.x.client import XClient, XError
+    from app.x.service import _send
 
     with Session(engine) as s:
         post = s.get(XPost, post_id)
@@ -1106,8 +1122,7 @@ def x_publish_post(post_id: int) -> RedirectResponse:
         account_id = post.account_id
         acc = s.get(XAccount, account_id)
         try:
-            xc = _authorize(s, acc)  # обновить токен + сохранить свежий refresh
-            tid = _send(xc, post)
+            tid = _send(XClient(acc), post)
         except XError as exc:
             post.status = "failed"
             post.publish_note = str(exc)[:300]

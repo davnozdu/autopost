@@ -176,43 +176,24 @@ def collect_account(account_id: int) -> dict:
         return {"created": created}
 
 
-def _authorize(s: Session, acc: XAccount) -> "XClient":
-    """Создать клиент, обновить access token и СОХРАНИТЬ свежий refresh_token.
-
-    Refresh-токен X ротируется и одноразовый — поэтому сохраняем сразу после
-    успешного обновления, иначе следующий запуск не авторизуется.
-    """
-    xc = XClient(acc)
-    xc.authorize()
-    if xc.new_refresh_token and xc.new_refresh_token != acc.refresh_token:
-        acc.refresh_token = xc.new_refresh_token
-        s.add(acc)
-        s.commit()
-    return xc
-
-
 def verify_account(account_id: int) -> dict:
     with Session(engine) as s:
         acc = s.get(XAccount, account_id)
         if not acc:
             return {"ok": False, "note": "no account"}
         try:
-            xc = _authorize(s, acc)
-            info = xc.verify()
+            info = XClient(acc).verify()
         except XError as exc:
             acc.verify_status = "error"
             acc.verify_note = str(exc)[:300]
             s.add(acc)
             s.commit()
             return {"ok": False, "note": str(exc)}
-        note = f"аккаунт @{info['username']}"
-        if "tweet.write" not in (info.get("scope") or ""):
-            note += " ⚠ в токене нет scope tweet.write — постинг не сработает, перевыпустите токен с tweet.write"
-        acc.verify_status = "ok" if "tweet.write" in (info.get("scope") or "") else "error"
-        acc.verify_note = note
+        acc.verify_status = "ok"
+        acc.verify_note = f"аккаунт @{info['username']}"
         s.add(acc)
         s.commit()
-        return {"ok": acc.verify_status == "ok", "note": note}
+        return {"ok": True, "note": acc.verify_note}
 
 
 def _send(xc: "XClient", post: XPost) -> str:
@@ -279,7 +260,7 @@ def run_x_publish(account_id: int, skippable: bool = False, count: int = 1) -> d
         if not pending:
             return {"published": 0, "note": "нет материалов в пуле"}
         try:
-            xc = _authorize(s, acc)  # обновляем токен + сохраняем свежий refresh
+            xc = XClient(acc)
         except XError as exc:
             return {"published": 0, "note": str(exc)}
 

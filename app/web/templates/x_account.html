@@ -7,24 +7,22 @@
 
 {% if acc.verify_status %}
 <div class="card" style="border-color:{% if acc.verify_status=='ok' %}#a7f3d0{% else %}#fecaca{% endif %}">
-  <strong>Проверка ключей:</strong> {{ acc.verify_status }}
+  <strong>Проверка cookie:</strong> {{ acc.verify_status }}
   {% if acc.verify_note %}<div class="muted" style="margin-top:4px">{{ acc.verify_note }}</div>{% endif %}
 </div>
 {% endif %}
 
 <!-- Настройки аккаунта -->
 <div class="card">
-  <h3 style="margin-top:0;font-size:1rem">Ключи и настройки (OAuth 2.0)</h3>
-  <p class="muted" style="margin-top:0">developer.x.com → User authentication settings: тип App — «Web App, Automated App or Bot» (confidential), App permissions — Read and write, scopes — <b>tweet.read tweet.write users.read offline.access</b>. Затем в Keys and tokens → OAuth 2.0 сгенерируйте токены и скопируйте <b>Refresh Token</b>. Пустое поле — не менять.</p>
+  <h3 style="margin-top:0;font-size:1rem">Cookie аккаунта (без платного API)</h3>
+  <p class="muted" style="margin-top:0">Публикация идёт через внутренний веб-API X по cookie вашего аккаунта (бесплатно). Как достать: в браузере залогиньтесь в @bigtweak_cz → F12 → вкладка Application/Storage → Cookies → https://x.com → скопируйте значения <b>auth_token</b> и <b>ct0</b>. Пустое поле — не менять.</p>
   <form method="post" action="/x/{{ acc.id }}">
     <label>Название</label>
     <input type="text" name="name" value="{{ acc.name }}" required>
-    <label>Client ID <span class="muted">(OAuth 2.0 Client ID)</span></label>
-    <input type="text" name="client_id" value="" placeholder="{% if acc.client_id %}••••••••{% else %}Client ID{% endif %}">
-    <label>Client Secret <span class="muted">(OAuth 2.0 Client Secret)</span></label>
-    <input type="text" name="client_secret" value="" placeholder="{% if acc.client_secret %}••••••••{% else %}Client Secret{% endif %}">
-    <label>Refresh Token <span class="muted">(из сгенерированных OAuth 2.0 токенов; с scope tweet.write + offline.access)</span></label>
-    <input type="text" name="refresh_token" value="" placeholder="{% if acc.refresh_token %}••••••••{% else %}Refresh Token{% endif %}">
+    <label>auth_token <span class="muted">(cookie)</span></label>
+    <input type="text" name="auth_token" value="" placeholder="{% if acc.auth_token %}••••••••{% else %}auth_token{% endif %}">
+    <label>ct0 <span class="muted">(cookie)</span></label>
+    <input type="text" name="ct0" value="" placeholder="{% if acc.ct0 %}••••••••{% else %}ct0{% endif %}">
     <label>Язык публикации <span class="muted">(на нём LLM готовит твит)</span></label>
     <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
       {% for code, lbl in languages %}
@@ -65,7 +63,7 @@
   <h3 style="margin-top:0;font-size:1rem">Действия</h3>
   <div class="actions" style="flex-wrap:wrap">
     <form method="post" action="/x/{{ acc.id }}/verify">
-      <button class="primary" type="submit">Проверить ключи</button>
+      <button class="primary" type="submit">Проверить cookie</button>
     </form>
     <form method="post" action="/x/{{ acc.id }}/collect">
       <button type="submit">Собрать в пул</button>

@@ -225,6 +225,20 @@ def tg_publish(account_id: int) -> dict:
 
 
 # ── X (Twitter) ───────────────────────────────────────────────────────
+@api_router.get("/x/version", dependencies=[Depends(require_api_key)])
+def x_version(check: bool = False) -> dict:
+    from app.x.updater import installed_version, latest_version
+
+    return {"installed": installed_version(), "latest": latest_version() if check else None}
+
+
+@api_router.post("/x/update", dependencies=[Depends(require_api_key)])
+def x_update(version: str = "") -> dict:
+    from app.x.updater import update
+
+    return update(version.strip())
+
+
 @api_router.post("/x/{account_id}/verify", dependencies=[Depends(require_api_key)])
 def x_verify(account_id: int) -> dict:
     from app.x.service import verify_account

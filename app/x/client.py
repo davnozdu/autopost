@@ -1,87 +1,57 @@
-"""Клиент X (Twitter) на OAuth 2.0 (по офиц. докам docs.x.com).
+"""Клиент X (Twitter) на twikit — публикация через внутренний веб-API по cookie
+аккаунта (auth_token + ct0), без платного API X.
 
-Постинг от имени пользователя через user access token (scope tweet.write).
-Долгоживущий доступ — через refresh_token (scope offline.access): перед работой
-обновляем короткоживущий access token (живёт ~2 часа). Refresh-токен может
-ротироваться, поэтому свежий ВСЕГДА возвращаем для сохранения.
+twikit — асинхронная библиотека; оборачиваем вызовы в asyncio.run (приложение
+синхронное). Каждый вызов создаёт свежий twikit.Client, ставит cookie и делает
+одну операцию — без переиспользования между разными event loop.
 
-Публикация — прямой вызов POST /2/tweets (без сторонних либ).
+twikit подгружается лениво (и из тома обновлений, см. app.x.updater).
 """
 
-import httpx
-
-TOKEN_URL = "https://api.x.com/2/oauth2/token"
-API = "https://api.x.com/2"
+import asyncio
 
 
 class XError(Exception):
-    """Ошибка авторизации/публикации в X."""
+    """Ошибка проверки/публикации в X."""
 
 
 class XClient:
     def __init__(self, account):
-        self.client_id = (account.client_id or "").strip()
-        self.client_secret = (account.client_secret or "").strip()
-        self.refresh_token = (account.refresh_token or "").strip()
-        if not self.client_id or not self.refresh_token:
-            raise XError("Заполните Client ID и Refresh Token (OAuth 2.0)")
-        self.access_token = ""
-        self.new_refresh_token = self.refresh_token
-        self.scope = ""
+        self.auth_token = (account.auth_token or "").strip()
+        self.ct0 = (account.ct0 or "").strip()
+        if not self.auth_token or not self.ct0:
+            raise XError("Заполните cookie auth_token и ct0")
 
-    def authorize(self) -> str:
-        """Обновить access token. Возвращает (возможно новый) refresh_token для сохранения."""
-        data = {
-            "grant_type": "refresh_token",
-            "refresh_token": self.refresh_token,
-            "client_id": self.client_id,
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        # confidential client → client_id:client_secret в Basic-авторизации
-        auth = (self.client_id, self.client_secret) if self.client_secret else None
-        try:
-            r = httpx.post(TOKEN_URL, data=data, headers=headers, auth=auth, timeout=30)
-            j = r.json()
-        except Exception as exc:
-            raise XError(f"Сеть/ответ X при обновлении токена: {exc}")
-        if r.status_code != 200 or "access_token" not in j:
-            msg = j.get("error_description") or j.get("error") or j
-            raise XError(f"Не удалось обновить токен ({r.status_code}): {msg}")
-        self.access_token = j["access_token"]
-        self.new_refresh_token = j.get("refresh_token") or self.refresh_token
-        self.scope = j.get("scope", "")
-        return self.new_refresh_token
+    def _new_client(self):
+        from app.x.updater import ensure_on_path
 
-    def _ensure(self) -> None:
-        if not self.access_token:
-            self.authorize()
+        ensure_on_path()  # использовать обновлённый twikit из тома, если есть
+        from twikit import Client
+
+        c = Client("en-US")
+        c.set_cookies({"auth_token": self.auth_token, "ct0": self.ct0})
+        return c
 
     def verify(self) -> dict:
-        """Проверить токены: вернуть @username и выданные scope."""
-        self._ensure()
+        """Проверить cookie: вернуть @screen_name аккаунта."""
+        async def _run():
+            c = self._new_client()
+            u = await c.user()
+            return {"username": getattr(u, "screen_name", "") or getattr(u, "name", "")}
+
         try:
-            r = httpx.get(f"{API}/users/me",
-                          headers={"Authorization": f"Bearer {self.access_token}"},
-                          timeout=30)
-            j = r.json()
+            return asyncio.run(_run())
         except Exception as exc:
-            raise XError(f"Сеть/ответ X: {exc}")
-        if r.status_code != 200 or "data" not in j:
-            raise XError(f"Не удалось получить аккаунт ({r.status_code}): {j}")
-        return {"username": j["data"].get("username", ""), "scope": self.scope}
+            raise XError(f"Проверка не удалась (cookie неверны/протухли?): {exc}")
 
     def post(self, text: str) -> str:
-        """Опубликовать твит (POST /2/tweets). Возвращает id твита."""
-        self._ensure()
+        """Опубликовать твит. Возвращает id."""
+        async def _run():
+            c = self._new_client()
+            t = await c.create_tweet(text=text)
+            return str(getattr(t, "id", "") or "")
+
         try:
-            r = httpx.post(f"{API}/tweets",
-                           headers={"Authorization": f"Bearer {self.access_token}",
-                                    "Content-Type": "application/json"},
-                           json={"text": text}, timeout=30)
-            j = r.json()
+            return asyncio.run(_run())
         except Exception as exc:
-            raise XError(f"Сеть/ответ X: {exc}")
-        if r.status_code not in (200, 201) or "data" not in j:
-            detail = j.get("detail") or j.get("title") or j
-            raise XError(f"Ошибка публикации твита ({r.status_code}): {detail}")
-        return str(j["data"].get("id", ""))
+            raise XError(f"Ошибка публикации твита: {exc}")

@@ -15,4 +15,5 @@ tzdata==2024.2
 # Instagram-публикация (соцсети). instagrapi тянет requests/pydantic/pycryptodomex.
 instagrapi==2.16.25
 Pillow>=12.2.0,<13
-# X (Twitter) — публикация через OAuth 2.0 (POST /2/tweets) на httpx, без доп. зависимостей.
+# X (Twitter) — публикация через twikit (внутренний веб-API по cookie, без платного API X).
+twikit==2.3.3

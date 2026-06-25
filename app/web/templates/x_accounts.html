@@ -3,6 +3,29 @@
 {% block content %}
 
 <div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Версия twikit</h3>
+  <p style="margin:0 0 8px">
+    Установлено: <strong>{{ tw_ver.installed or "не установлен" }}</strong>
+    {% if tw_ver.latest %}
+      · на PyPI: <strong>{{ tw_ver.latest }}</strong>
+      {% if tw_ver.installed == tw_ver.latest %}<span class="muted">— актуально</span>
+      {% else %}<span style="color:#b45309">— доступно обновление</span>{% endif %}
+    {% endif %}
+  </p>
+  <div class="actions" style="flex-wrap:wrap">
+    <a href="/x?check=1"><button type="button">Проверить PyPI</button></a>
+    <form method="post" action="/x/update"
+          onsubmit="return confirm('Обновить twikit до последней версии?')">
+      <button class="primary" type="submit">Обновить до последней</button>
+    </form>
+  </div>
+  <p class="muted" style="margin-bottom:0">
+    Публикация в X идёт через twikit (внутренний веб-API по cookie, бесплатно). Если X сменит
+    эндпоинты и постинг сломается — обновите twikit этой кнопкой (ставится в data/pylibs, без пересборки образа).
+  </p>
+</div>
+
+<div class="card">
   <h2 style="font-size:1.05rem;margin-top:0">Добавить аккаунт X (Twitter)</h2>
   <form method="post" action="/x">
     <label>Название (для себя)</label>
@@ -10,7 +33,7 @@
     <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
   </form>
   <p class="muted" style="margin-bottom:0">
-    Внутри задаются 4 ключа OAuth 1.0a (из developer.x.com), язык, расписание и RSS-источники.
+    Внутри задаются cookie аккаунта (auth_token + ct0), язык, расписание и RSS-источники.
   </p>
 </div>
 
@@ -31,7 +54,7 @@
     <p class="muted" style="margin:6px 0 0">
       {% if acc.enabled %}активен{% else %}выключен{% endif %}
       · твиты: {{ acc.post_times }} · язык: {{ acc.language.upper() }}
-      {% if acc.verify_status %} · ключи: {{ acc.verify_status }}{% endif %}
+      {% if acc.verify_status %} · cookie: {{ acc.verify_status }}{% endif %}
     </p>
   </div>
   {% endfor %}
