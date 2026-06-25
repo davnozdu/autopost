@@ -442,6 +442,7 @@ def ig_account_page(request: Request, account_id: int, msg: str = "") -> HTMLRes
         {
             "acc": acc,
             "sources": sources,
+            "languages": LANGUAGES,
             "sections": sections,
             "labels": IG_STATUS_LABELS,
             "runs": runs,
@@ -457,12 +458,14 @@ def ig_save_account(
     username: str = Form(""),
     password: str = Form(""),
     proxy: str = Form(""),
+    language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_time: str = Form("11:00"),
     story_times: str = Form("13:00,17:00,21:00"),
     collect_limit: int = Form(8),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
+    allowed_l = {c for c, _ in LANGUAGES}
     with Session(engine) as s:
         acc = s.get(IGAccount, account_id)
         if not acc:
@@ -472,6 +475,7 @@ def ig_save_account(
         if password.strip():
             acc.password = password.strip()
         acc.proxy = proxy.strip()
+        acc.language = language if language in allowed_l else "ru"
         acc.collect_time = collect_time.strip() or "07:00"
         acc.post_time = post_time.strip() or "11:00"
         acc.story_times = ",".join(

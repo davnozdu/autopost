@@ -24,6 +24,12 @@
     <input type="text" name="password" value="" placeholder="{% if acc.password %}••••••••{% else %}пароль{% endif %}">
     <label>Прокси <span class="muted">(опц., рекомендуется для стабильности)</span></label>
     <input type="text" name="proxy" value="{{ acc.proxy }}" placeholder="http://user:pass@host:port">
+    <label>Язык публикации <span class="muted">(на нём LLM готовит подпись)</span></label>
+    <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
+      {% for code, lbl in languages %}
+      <option value="{{ code }}" {% if acc.language == code %}selected{% endif %}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
 
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:120px">

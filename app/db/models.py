@@ -130,11 +130,13 @@ class IGAccount(SQLModel, table=True):
     password: str = ""           # нужен для входа/перелогина (хранится как github_token)
     session_json: str = ""       # сохранённая сессия instagrapi (чтобы не входить заново)
     proxy: str = ""              # опциональный прокси (рекомендуется для стабильности)
+    language: str = "ru"         # язык публикации: на нём LLM готовит подпись
     # Расписание (ежедневно): 1 пост в день + сториз по списку времён.
     collect_time: str = "07:00"  # когда готовить пул постов
     post_time: str = "11:00"     # когда публиковать 1 пост в ленту
     story_times: str = "13:00,17:00,21:00"  # времена публикации сториз (2–3 в день)
     collect_limit: int = 8       # сколько материалов готовить за один сбор (пул)
+    last_source_id: int = 0      # курсор ротации источников (для равномерного чередования)
     enabled: bool = True
     # Состояние входа (для админки): "", ok, challenge, error
     login_status: str = ""
@@ -160,6 +162,7 @@ class IGPost(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     account_id: int = Field(default=0, index=True)
+    source_id: int = 0           # из какого источника (для ротации/статистики)
     source_url: str = Field(default="", index=True)
     source_title: str = ""
     kind: str = ""               # post | story — назначается при публикации

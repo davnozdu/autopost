@@ -108,14 +108,16 @@ def parse_selection(raw: str, n: int, limit: int) -> list[int] | None:
     return idx[:limit] or None
 
 
-def build_ig_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
-    """Промпт подписи для Instagram-поста по внешней новости (группа rss).
+def build_ig_prompt(config: AppConfig, news: dict, language: str | None = None) -> tuple[str, str]:
+    """Промпт подписи для Instagram-поста.
 
     Возвращает строгий JSON {caption, hashtags}. Тон — живой, как у человека,
     по тем же общим инструкциям, но в формате соцсети (коротко, с эмодзи).
+    `language` (язык публикации аккаунта) переопределяет глобальный config.language.
     """
+    lang = (language or config.language or "ru").strip()
     rules = [
-        f"Piš výhradně v jazyce: {config.language}.",
+        f"Piš výhradně v jazyce: {lang}.",
         "Formát: poutavý popisek pro Instagram, 2–4 krátké odstavce, "
         "lehké a lidské podání, klidně 1–3 vhodné emoji (ne přehnaně).",
         "Bez klišé a marketingového balastu; první věta musí zaujmout.",

@@ -26,6 +26,9 @@ def prepare(url: str | None, out_path: Path, kind: str) -> Path | None:
 
     kind: "post" | "story". При любой ошибке/пустом url → None.
     """
+    from app.util import clean_image_url
+
+    url = clean_image_url(url)
     if not url:
         return None
     try:

@@ -108,13 +108,15 @@ def generate_article(
 
 
 def _fetch_full(link: str, image: str | None, summary: str) -> tuple[str, str | None]:
+    from app.util import clean_image_url
+
     text = ""
-    img = image or None
+    img = clean_image_url(image) or None
     try:
         html = fetch_html(link)
         text = extract_text(html)
         if not img:
-            img = extract_image(html, link)
+            img = clean_image_url(extract_image(html, link))
     except Exception:
         pass
     if not text.strip():

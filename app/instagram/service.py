@@ -1,10 +1,10 @@
 """Бизнес-логика Instagram: сбор материалов в пул, вход в аккаунт,
 публикация постов и сториз. Используется планировщиком и кнопками админки.
 
-Две группы источников (IGSource.kind):
-  • own — мои сайты: текст уже готов (прогнан LLM на сайте). Берём аннотацию,
-          добавляем ссылку на сайт. LLM повторно НЕ вызываем.
-  • rss — внешние RSS: материал гоним через LLM (подпись + хэштеги).
+Все источники обрабатываются одинаково: материал прогоняется через LLM
+(summary + хэштеги на языке аккаунта), в подпись добавляется ссылка на сайт
+источника. Источники чередуются по кругу (равномерно), а ВНУТРИ источника
+лучший материал выбирает LLM.
 """
 
 from datetime import datetime, timezone
@@ -19,12 +19,19 @@ from app.db.session import engine
 from app.instagram import media as ig_media
 from app.instagram.client import IGChallengeRequired, IGClient, IGError
 from app.llm.client import LLMClient, LLMError
-from app.llm.prompt import build_ig_prompt, build_shorten_prompt, parse_ig_parts
+from app.llm.prompt import (
+    build_ig_prompt,
+    build_select_prompt,
+    build_shorten_prompt,
+    parse_ig_parts,
+    parse_selection,
+)
 from app.scraper.rss import peek_feed
+from app.util import clean_image_url
 
-CANDIDATE_POOL = 40       # сколько кандидатов рассматривать максимум
 IG_CAPTION_LIMIT = 2200   # лимит символов подписи поста в Instagram
 IG_MAX_HASHTAGS = 30      # лимит хэштегов в посте
+SELECT_PER_SOURCE = 5     # сколько лучших оставлять от одного источника при отборе
 
 
 def _now() -> datetime:
@@ -49,10 +56,11 @@ def _compose_caption(body: str, link: str, hashtags: list[str]) -> str:
     return cap
 
 
-def _shorten(client: LLMClient, config: AppConfig, text: str, max_chars: int) -> str:
+def _shorten(client: LLMClient, config: AppConfig, language: str, text: str,
+             max_chars: int) -> str:
     """Сократить текст под лимит через LLM; при сбое — обрезать по словам."""
     try:
-        system, user = build_shorten_prompt(text, max_chars, config.language)
+        system, user = build_shorten_prompt(text, max_chars, language)
         res = client.chat(system, user, json_mode=False, temperature=0.4,
                           model=(config.llm_model or None))
         out = res.text.strip()
@@ -64,8 +72,8 @@ def _shorten(client: LLMClient, config: AppConfig, text: str, max_chars: int) ->
     return (cut + "…") if cut else text[:max_chars]
 
 
-def _fit_caption(client: LLMClient, config: AppConfig, body: str, link: str,
-                 hashtags: list[str]) -> str:
+def _fit_caption(client: LLMClient, config: AppConfig, language: str, body: str,
+                 link: str, hashtags: list[str]) -> str:
     """Подпись поста в пределах лимита Instagram; при превышении — саммари тела."""
     cap = _compose_caption(body, link, hashtags)
     if len(cap) <= IG_CAPTION_LIMIT:
@@ -73,15 +81,47 @@ def _fit_caption(client: LLMClient, config: AppConfig, body: str, link: str,
     # сколько символов занимает обвязка (ссылка + хэштеги) — остаток отдаём телу
     overhead = len(_compose_caption("", link, hashtags))
     target = max(200, IG_CAPTION_LIMIT - overhead - 20)
-    body = _shorten(client, config, body, target)
+    body = _shorten(client, config, language, body, target)
     cap = _compose_caption(body, link, hashtags)
     if len(cap) > IG_CAPTION_LIMIT:
         cap = cap[: IG_CAPTION_LIMIT - 1].rstrip() + "…"
     return cap
 
 
+def _rotate(sources: list[IGSource], last_source_id: int) -> list[IGSource]:
+    """Упорядочить источники, начиная со следующего за последним использованным."""
+    order = sorted(sources, key=lambda x: x.id)
+    ids = [x.id for x in order]
+    if last_source_id in ids:
+        i = (ids.index(last_source_id) + 1) % len(order)
+        order = order[i:] + order[:i]
+    return order
+
+
+def _select_within(client: LLMClient, config: AppConfig, language: str,
+                   cands: list[dict], limit: int) -> list[dict]:
+    """Из кандидатов ОДНОГО источника выбрать лучшие через LLM (дёшево: title+summary)."""
+    if len(cands) <= limit:
+        return cands
+    items = [{"i": i, "title": e.get("title", ""), "summary": e.get("summary", "")}
+             for i, e in enumerate(cands)]
+    try:
+        system, user = build_select_prompt(items, limit, f"Instagram ({language})")
+        res = client.chat(system, user, json_mode=True, temperature=0.2,
+                          model=(config.llm_model or None))
+        idx = parse_selection(res.text, len(cands), limit)
+    except LLMError:
+        idx = None
+    return [cands[i] for i in idx] if idx else cands[:limit]
+
+
 def collect_account(account_id: int) -> dict:
-    """Собрать материалы со всех источников аккаунта в пул черновиков IGPost."""
+    """Собрать материалы в пул, чередуя источники по кругу (равномерно).
+
+    Внутри каждого источника лучший материал выбирает LLM; затем источники
+    чередуются (round-robin), начиная со следующего за `last_source_id`, чтобы
+    публикации шли из разных источников по очереди.
+    """
     with Session(engine) as s:
         acc = s.get(IGAccount, account_id)
         if not acc:
@@ -91,17 +131,40 @@ def collect_account(account_id: int) -> dict:
                 IGSource.account_id == account_id, IGSource.enabled == True  # noqa: E712
             )
         ).all()
+        if not sources:
+            return {"created": 0, "note": "нет источников"}
         config = s.get(AppConfig, 1) or AppConfig(id=1)
+        language = acc.language or config.language or "ru"
         client = LLMClient()
 
-        # 1) кандидаты со всех лент, дедуп по ссылке + против уже созданных IGPost
+        # дедуп против уже опубликованного (по нормализованному заголовку)
+        pub_titles = s.exec(
+            select(IGPost.source_title).where(
+                IGPost.account_id == account_id, IGPost.status == "published"
+            )
+        ).all()
+        pub_norm = {services._norm_title(t) for t in pub_titles}
+
+        # сколько ещё нужно добрать до лимита пула
+        have = len(s.exec(
+            select(IGPost).where(
+                IGPost.account_id == account_id,
+                IGPost.status.in_(["draft", "scheduled"]),
+            )
+        ).all())
+        need = max(0, acc.collect_limit - have)
+        if need == 0:
+            return {"created": 0, "note": "пул уже заполнен"}
+
+        # 1) по каждому источнику: кандидаты + LLM-выбор лучших ВНУТРИ источника
         seen: set[str] = set()
-        candidates: list[tuple[IGSource, dict]] = []
+        per_source: dict[int, list[dict]] = {}
         for src in sources:
             try:
                 data = peek_feed(src.url)
             except Exception:
                 continue
+            cands = []
             for e in data["entries"]:
                 link = e.get("link")
                 if not link or link in seen:
@@ -109,59 +172,70 @@ def collect_account(account_id: int) -> dict:
                 seen.add(link)
                 if s.exec(select(IGPost).where(IGPost.source_url == link)).first():
                     continue
-                candidates.append((src, e))
+                if services._norm_title(e.get("title", "")) in pub_norm:
+                    continue
+                e["_src_id"] = src.id
+                e["_link_url"] = src.link_url.strip()
+                cands.append(e)
+            if cands:
+                per_source[src.id] = _select_within(
+                    client, config, language, cands, SELECT_PER_SOURCE
+                )
 
-        # дедуп против опубликованного по нормализованному заголовку
-        pub_titles = s.exec(
-            select(IGPost.source_title).where(
-                IGPost.account_id == account_id, IGPost.status == "published"
-            )
-        ).all()
-        pub_norm = {services._norm_title(t) for t in pub_titles}
-        candidates = [
-            (src, e) for (src, e) in candidates
-            if services._norm_title(e.get("title", "")) not in pub_norm
-        ]
-        candidates = candidates[:CANDIDATE_POOL]
+        # 2) чередование по кругу: по одному из каждого источника за «круг»
+        order = _rotate([x for x in sources if x.id in per_source], acc.last_source_id)
+        queue: list[dict] = []
+        rnd = 0
+        while len(queue) < need and order:
+            progressed = False
+            for src in order:
+                lst = per_source.get(src.id, [])
+                if rnd < len(lst):
+                    queue.append(lst[rnd])
+                    progressed = True
+                    if len(queue) >= need:
+                        break
+            if not progressed:
+                break
+            rnd += 1
 
-        # 2) сколько ещё нужно добрать до лимита пула
-        have = s.exec(
-            select(IGPost).where(
-                IGPost.account_id == account_id,
-                IGPost.status.in_(["draft", "scheduled"]),
-            )
-        ).all()
-        need = max(0, acc.collect_limit - len(have))
-        candidates = candidates[:need]
-
+        # 3) генерация подписи на языке аккаунта + создание постов
         created = 0
-        for src, e in candidates:
+        last_sid = acc.last_source_id
+        for e in queue:
             title = e.get("title", "")
             link = e.get("link", "")
             summary = e.get("summary", "")
-            image = e.get("image")
-            link_url = src.link_url.strip()
-            # любой источник: материал через LLM → summary + хэштеги по содержимому
-            text, image = services._fetch_full(link, image, summary)
+            link_url = e.get("_link_url", "")
+            text, image = services._fetch_full(link, e.get("image"), summary)
             try:
-                system, user = build_ig_prompt(config, {"title": title, "text": text})
+                system, user = build_ig_prompt(
+                    config, {"title": title, "text": text}, language=language
+                )
                 res = client.chat(system, user, json_mode=True, temperature=0.8,
                                   model=(config.llm_model or None))
                 body, hashtags = parse_ig_parts(res.text, fallback_text=summary)
             except LLMError:
                 continue
-            caption = _fit_caption(client, config, body, link_url, hashtags)
+            caption = _fit_caption(client, config, language, body, link_url, hashtags)
             s.add(IGPost(
                 account_id=account_id,
+                source_id=e.get("_src_id", 0),
                 source_url=link,
                 source_title=title,
-                image_url=image,
+                image_url=clean_image_url(image),
                 caption=caption,
                 link_url=link_url,
                 status="scheduled",
             ))
             s.commit()
+            last_sid = e.get("_src_id", last_sid)
             created += 1
+
+        # запомнить курсор ротации для следующего сбора
+        acc.last_source_id = last_sid
+        s.add(acc)
+        s.commit()
         return {"created": created}
 
 

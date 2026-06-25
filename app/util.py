@@ -53,3 +53,17 @@ LANG_NAME = {
 
 def lang_name(seg: str) -> str:
     return LANG_NAME.get(seg, seg)
+
+
+def clean_image_url(url: str | None) -> str | None:
+    """Починить «склеенный» URL вида https://domainhttps://real → https://real.
+
+    Так ломается картинка, если к уже абсолютному адресу ошибочно приклеили
+    домен сайта (без слэша между ними). Обычный относительный/абсолютный URL
+    не трогаем. CDN-прокси (…/?u=https://…) не задеваем — там есть слэш до схемы.
+    """
+    if not url:
+        return url
+    u = url.strip()
+    m = re.match(r"^(https?://[^/]*?)(https?://.+)$", u)
+    return m.group(2) if m else u
