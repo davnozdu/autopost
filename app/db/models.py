@@ -233,6 +233,63 @@ class TGPost(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+# ── X / Twitter (соцсети) ─────────────────────────────────────────────
+# По аналогии: XAccount → XSource → XPost. Публикация через API X (OAuth 1.0a:
+# загрузка медиа v1.1 + создание твита v2). Лимит твита 280 символов
+# (ссылка считается за 23). Только посты.
+
+
+class XAccount(SQLModel, table=True):
+    """Аккаунт X (Twitter): ключи OAuth 1.0a и расписание."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    api_key: str = ""              # Consumer Key (API Key)
+    api_secret: str = ""           # Consumer Secret (API Key Secret)
+    access_token: str = ""         # Access Token аккаунта
+    access_secret: str = ""        # Access Token Secret
+    language: str = "ru"           # язык публикации
+    collect_time: str = "07:00"
+    post_times: str = "11:00,18:00"  # времена публикации твитов
+    collect_limit: int = 8
+    last_source_id: int = 0
+    enabled: bool = True
+    verify_status: str = ""        # "", ok, error
+    verify_note: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class XSource(SQLModel, table=True):
+    """RSS-источник для X-аккаунта."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    name: str
+    url: str
+    link_url: str = ""             # ссылка на сайт источника (добавляется в твит)
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=_now)
+
+
+class XPost(SQLModel, table=True):
+    """Подготовленный твит."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(default=0, index=True)
+    source_id: int = 0
+    source_url: str = Field(default="", index=True)
+    source_title: str = ""
+    image_url: str | None = None
+    caption: str = ""              # текст твита (без ссылки; ссылка добавляется при отправке)
+    link_url: str = ""
+    status: str = "scheduled"
+    publish_at: datetime | None = None
+    published_at: datetime | None = None
+    publish_note: str = ""
+    tweet_id: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
 class Article(SQLModel, table=True):
     """Подготовленная статья: текст, расписание и статус."""
 

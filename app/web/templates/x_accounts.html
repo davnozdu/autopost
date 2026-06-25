@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}X (Twitter){% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Добавить аккаунт X (Twitter)</h2>
+  <form method="post" action="/x">
+    <label>Название (для себя)</label>
+    <input type="text" name="name" required placeholder="bigtweak_cz">
+    <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
+  </form>
+  <p class="muted" style="margin-bottom:0">
+    Внутри задаются 4 ключа OAuth 1.0a (из developer.x.com), язык, расписание и RSS-источники.
+  </p>
+</div>
+
+<h2 style="font-size:1.05rem">Аккаунты</h2>
+{% if accounts %}
+  {% for acc in accounts %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+      <strong>{{ acc.name }}</strong>
+      <div class="actions">
+        <a href="/x/{{ acc.id }}"><button type="button" class="primary">Настроить</button></a>
+        <form method="post" action="/x/{{ acc.id }}/delete"
+              onsubmit="return confirm('Удалить аккаунт и его источники?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      {% if acc.enabled %}активен{% else %}выключен{% endif %}
+      · твиты: {{ acc.post_times }} · язык: {{ acc.language.upper() }}
+      {% if acc.verify_status %} · ключи: {{ acc.verify_status }}{% endif %}
+    </p>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Пока нет аккаунтов. Создайте первый.</p>
+{% endif %}
+
+{% endblock %}

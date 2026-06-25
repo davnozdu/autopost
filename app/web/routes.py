@@ -25,6 +25,9 @@ from app.db.models import (
     TGAccount,
     TGPost,
     TGSource,
+    XAccount,
+    XPost,
+    XSource,
 )
 from app.db.session import engine
 from app.llm.client import LLMClient, LLMError
@@ -886,6 +889,243 @@ def tg_delete_post(post_id: int) -> RedirectResponse:
             s.delete(post)
             s.commit()
     return _redirect(f"/telegram/{account_id}", "Удалено")
+
+
+# ── X (Twitter): аккаунты ─────────────────────────────────────────────
+@router.get("/x", response_class=HTMLResponse)
+def x_accounts_page(request: Request, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        accounts = s.exec(select(XAccount).order_by(XAccount.id)).all()
+    return templates.TemplateResponse(
+        request, "x_accounts.html", {"accounts": accounts, "msg": msg}
+    )
+
+
+@router.post("/x")
+def x_add_account(name: str = Form(...)) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = XAccount(name=name.strip())
+        s.add(acc)
+        s.commit()
+        s.refresh(acc)
+    scheduler.reload_jobs()
+    return _redirect(f"/x/{acc.id}", "Аккаунт создан — заполните ключи")
+
+
+@router.get("/x/{account_id}", response_class=HTMLResponse)
+def x_account_page(request: Request, account_id: int, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        acc = s.get(XAccount, account_id)
+        if not acc:
+            return _redirect("/x", "Аккаунт не найден")
+        sources = s.exec(
+            select(XSource).where(XSource.account_id == account_id).order_by(XSource.id)
+        ).all()
+        posts = s.exec(
+            select(XPost)
+            .where(XPost.account_id == account_id)
+            .order_by(XPost.created_at.desc())
+        ).all()
+    sections = {"draft": [], "scheduled": [], "published": [], "failed": []}
+    for p in posts:
+        sections.get(p.status, sections["draft"]).append(p)
+    runs = [j for j in scheduler.jobs_info()
+            if j["id"].startswith("x-")
+            and j["id"].split("-")[2:3] == [str(account_id)]]
+    return templates.TemplateResponse(
+        request,
+        "x_account.html",
+        {
+            "acc": acc,
+            "sources": sources,
+            "languages": LANGUAGES,
+            "sections": sections,
+            "labels": IG_STATUS_LABELS,
+            "runs": runs,
+            "msg": msg,
+        },
+    )
+
+
+@router.post("/x/{account_id}")
+def x_save_account(
+    account_id: int,
+    name: str = Form(...),
+    api_key: str = Form(""),
+    api_secret: str = Form(""),
+    access_token: str = Form(""),
+    access_secret: str = Form(""),
+    language: str = Form("ru"),
+    collect_time: str = Form("07:00"),
+    post_times: str = Form("11:00,18:00"),
+    collect_limit: int = Form(8),
+    enabled: bool = Form(False),
+) -> RedirectResponse:
+    allowed_l = {c for c, _ in LANGUAGES}
+    with Session(engine) as s:
+        acc = s.get(XAccount, account_id)
+        if not acc:
+            return _redirect("/x", "Аккаунт не найден")
+        acc.name = name.strip()
+        if api_key.strip():
+            acc.api_key = api_key.strip()
+        if api_secret.strip():
+            acc.api_secret = api_secret.strip()
+        if access_token.strip():
+            acc.access_token = access_token.strip()
+        if access_secret.strip():
+            acc.access_secret = access_secret.strip()
+        acc.language = language if language in allowed_l else "ru"
+        acc.collect_time = collect_time.strip() or "07:00"
+        acc.post_times = ",".join(
+            t.strip() for t in post_times.split(",") if t.strip()
+        ) or "11:00,18:00"
+        acc.collect_limit = max(1, collect_limit)
+        acc.enabled = enabled
+        s.add(acc)
+        s.commit()
+    scheduler.reload_jobs()
+    return _redirect(f"/x/{account_id}", "Настройки аккаунта сохранены")
+
+
+@router.post("/x/{account_id}/delete")
+def x_delete_account(account_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = s.get(XAccount, account_id)
+        if acc:
+            for src in s.exec(select(XSource).where(XSource.account_id == account_id)).all():
+                s.delete(src)
+            for p in s.exec(select(XPost).where(XPost.account_id == account_id)).all():
+                s.delete(p)
+            s.delete(acc)
+            s.commit()
+    scheduler.reload_jobs()
+    return _redirect("/x", "Аккаунт удалён")
+
+
+@router.post("/x/{account_id}/verify")
+def x_verify(account_id: int) -> RedirectResponse:
+    from app.x.service import verify_account
+
+    res = verify_account(account_id)
+    msg = res.get("note", "")[:160] if res.get("ok") else f"Ошибка: {res.get('note', '')[:140]}"
+    return _redirect(f"/x/{account_id}", msg)
+
+
+@router.post("/x/{account_id}/collect")
+def x_collect_now(account_id: int) -> RedirectResponse:
+    from app.x.service import collect_account
+
+    res = collect_account(account_id)
+    return _redirect(f"/x/{account_id}", f"Собрано в пул: {res.get('created', 0)}")
+
+
+@router.post("/x/{account_id}/publish")
+def x_publish_now(account_id: int) -> RedirectResponse:
+    from app.x.service import run_x_publish
+
+    res = run_x_publish(account_id, count=1)
+    return _redirect(f"/x/{account_id}",
+                     f"{res.get('note', '')} (опубликовано {res.get('published', 0)})")
+
+
+# ── X: источники и посты ──────────────────────────────────────────────
+@router.post("/x/{account_id}/sources")
+def x_add_source(
+    account_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    link_url: str = Form(""),
+) -> RedirectResponse:
+    with Session(engine) as s:
+        s.add(XSource(
+            account_id=account_id, name=name.strip(), url=url.strip(),
+            link_url=link_url.strip(),
+        ))
+        s.commit()
+    return _redirect(f"/x/{account_id}", "Источник добавлен")
+
+
+@router.post("/x-sources/{source_id}")
+def x_edit_source(
+    source_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    link_url: str = Form(""),
+) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(XSource, source_id)
+        account_id = src.account_id if src else 0
+        if src:
+            src.name = name.strip()
+            src.url = url.strip()
+            src.link_url = link_url.strip()
+            s.add(src)
+            s.commit()
+    return _redirect(f"/x/{account_id}", "Источник обновлён")
+
+
+@router.post("/x-sources/{source_id}/delete")
+def x_delete_source(source_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(XSource, source_id)
+        account_id = src.account_id if src else 0
+        if src:
+            s.delete(src)
+            s.commit()
+    return _redirect(f"/x/{account_id}", "Источник удалён")
+
+
+@router.post("/x-posts/{post_id}")
+def x_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
+    with Session(engine) as s:
+        post = s.get(XPost, post_id)
+        if not post:
+            return _redirect("/x", "Не найдено")
+        post.caption = caption
+        s.add(post)
+        s.commit()
+        account_id = post.account_id
+    return _redirect(f"/x/{account_id}", "Текст сохранён")
+
+
+@router.post("/x-posts/{post_id}/publish")
+def x_publish_post(post_id: int) -> RedirectResponse:
+    from app.x.client import XClient, XError
+    from app.x.service import _send
+
+    with Session(engine) as s:
+        post = s.get(XPost, post_id)
+        if not post:
+            return _redirect("/x", "Не найдено")
+        account_id = post.account_id
+        acc = s.get(XAccount, account_id)
+        try:
+            tid = _send(XClient(acc), post)
+        except XError as exc:
+            post.status = "failed"
+            post.publish_note = str(exc)[:300]
+            s.add(post)
+            s.commit()
+            return _redirect(f"/x/{account_id}", f"Ошибка: {str(exc)[:100]}")
+        post.status = "published"
+        post.tweet_id = tid
+        post.published_at = datetime.now(timezone.utc)
+        post.publish_note = "опубликовано вручную"
+        s.add(post)
+        s.commit()
+    return _redirect(f"/x/{account_id}", "Опубликовано в X")
+
+
+@router.post("/x-posts/{post_id}/delete")
+def x_delete_post(post_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        post = s.get(XPost, post_id)
+        account_id = post.account_id if post else 0
+        if post:
+            s.delete(post)
+            s.commit()
+    return _redirect(f"/x/{account_id}", "Удалено")
 
 
 # ── Глобальные настройки LLM ──────────────────────────────────────────

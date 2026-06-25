@@ -1,0 +1,39 @@
+Top 5 IT News RSS Feeds (verified working — June 25, 2026)
+=========================================================
+
+1. TechCrunch
+   URL:        https://techcrunch.com/feed/
+   Format:     RSS 2.0
+   Status:     ✓ 200 OK (application/rss+xml)
+   About:      Fastest source for startup funding, VC news, product launches.
+
+2. The Verge
+   URL:        https://www.theverge.com/rss/index.xml
+   Format:     Atom
+   Status:     ✓ 200 OK (application/xml)
+   About:      Consumer tech, reviews, culture, and industry news.
+
+3. Ars Technica
+   URL:        https://feeds.arstechnica.com/arstechnica/index
+   Format:     RSS 2.0
+   Status:     ✓ 200 OK (text/xml)
+   About:      In-depth IT, science, security, and policy coverage.
+
+4. Wired
+   URL:        https://www.wired.com/feed/rss
+   Format:     RSS 2.0
+   Status:     ✓ 200 OK (application/xml)
+   About:      Tech, science, business, security, and culture reporting.
+
+5. Hacker News (Front Page)
+   URL:        https://hnrss.org/frontpage
+   Format:     RSS 2.0
+   Status:     ✓ 200 OK (application/xml)
+   About:      Community-curated tech/startup/programming front-page links.
+   Note:       Uses hnrss.org (third-party RSS proxy for HN).
+
+────────────────────────────────────────────────
+All feeds tested via HTTP HEAD + GET:
+  ✓ Return HTTP 200
+  ✓ Return valid XML with RSS/Atom content type
+  ✓ Contain real feed items (titles, links, descriptions)

@@ -14,10 +14,11 @@ from sqlmodel import Session, select
 
 from app import services
 from app.config import get_settings
-from app.db.models import IGAccount, Site, TGAccount
+from app.db.models import IGAccount, Site, TGAccount, XAccount
 from app.db.session import engine
 from app.instagram import service as ig_service
 from app.telegram import service as tg_service
+from app.x import service as x_service
 
 _scheduler: BackgroundScheduler | None = None
 
@@ -54,6 +55,9 @@ def reload_jobs() -> None:
         ).all()
         tg_accounts = s.exec(
             select(TGAccount).where(TGAccount.enabled == True)  # noqa: E712
+        ).all()
+        x_accounts = s.exec(
+            select(XAccount).where(XAccount.enabled == True)  # noqa: E712
         ).all()
     tz = _tz()
     for site in sites:
@@ -116,6 +120,25 @@ def reload_jobs() -> None:
                     tg_service.run_tg_publish,
                     CronTrigger(hour=ph, minute=pm, timezone=tz),
                     args=[acc.id], id=f"tg-post-{acc.id}-{i}", replace_existing=True,
+                )
+        except Exception:
+            continue
+
+    # X (Twitter): ежедневный сбор + твиты по списку времён.
+    for acc in x_accounts:
+        try:
+            cch, ccm = services._parse_hhmm(acc.collect_time)
+            _scheduler.add_job(
+                x_service.collect_account,
+                CronTrigger(hour=cch, minute=ccm, timezone=tz),
+                args=[acc.id], id=f"x-collect-{acc.id}", replace_existing=True,
+            )
+            for i, t in enumerate(x for x in acc.post_times.split(",") if x.strip()):
+                ph, pm = services._parse_hhmm(t.strip())
+                _scheduler.add_job(
+                    x_service.run_x_publish,
+                    CronTrigger(hour=ph, minute=pm, timezone=tz),
+                    args=[acc.id], id=f"x-post-{acc.id}-{i}", replace_existing=True,
                 )
         except Exception:
             continue

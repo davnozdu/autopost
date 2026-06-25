@@ -224,6 +224,28 @@ def tg_publish(account_id: int) -> dict:
     return run_tg_publish(account_id, count=1)
 
 
+# ── X (Twitter) ───────────────────────────────────────────────────────
+@api_router.post("/x/{account_id}/verify", dependencies=[Depends(require_api_key)])
+def x_verify(account_id: int) -> dict:
+    from app.x.service import verify_account
+
+    return verify_account(account_id)
+
+
+@api_router.post("/x/{account_id}/collect", dependencies=[Depends(require_api_key)])
+def x_collect(account_id: int) -> dict:
+    from app.x.service import collect_account
+
+    return collect_account(account_id)
+
+
+@api_router.post("/x/{account_id}/publish", dependencies=[Depends(require_api_key)])
+def x_publish(account_id: int) -> dict:
+    from app.x.service import run_x_publish
+
+    return run_x_publish(account_id, count=1)
+
+
 # ── LLM ───────────────────────────────────────────────────────────────
 @api_router.post("/llm/test", dependencies=[Depends(require_api_key)])
 def llm_test() -> dict:

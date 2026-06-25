@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{{ acc.name }} — X{% endblock %}
+{% block content %}
+
+<p><a href="/x">← Все аккаунты</a></p>
+<h2 style="font-size:1.15rem;margin-bottom:4px">{{ acc.name }}</h2>
+
+{% if acc.verify_status %}
+<div class="card" style="border-color:{% if acc.verify_status=='ok' %}#a7f3d0{% else %}#fecaca{% endif %}">
+  <strong>Проверка ключей:</strong> {{ acc.verify_status }}
+  {% if acc.verify_note %}<div class="muted" style="margin-top:4px">{{ acc.verify_note }}</div>{% endif %}
+</div>
+{% endif %}
+
+<!-- Настройки аккаунта -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Ключи и настройки</h3>
+  <p class="muted" style="margin-top:0">developer.x.com → ваш проект/приложение → User authentication: Read and Write → сгенерируйте ключи. Оставьте поле пустым, чтобы не менять.</p>
+  <form method="post" action="/x/{{ acc.id }}">
+    <label>Название</label>
+    <input type="text" name="name" value="{{ acc.name }}" required>
+    <label>API Key (Consumer Key)</label>
+    <input type="text" name="api_key" value="" placeholder="{% if acc.api_key %}••••••••{% else %}API Key{% endif %}">
+    <label>API Key Secret</label>
+    <input type="text" name="api_secret" value="" placeholder="{% if acc.api_secret %}••••••••{% else %}API Key Secret{% endif %}">
+    <label>Access Token</label>
+    <input type="text" name="access_token" value="" placeholder="{% if acc.access_token %}••••••••{% else %}Access Token{% endif %}">
+    <label>Access Token Secret</label>
+    <input type="text" name="access_secret" value="" placeholder="{% if acc.access_secret %}••••••••{% else %}Access Token Secret{% endif %}">
+    <label>Язык публикации <span class="muted">(на нём LLM готовит твит)</span></label>
+    <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
+      {% for code, lbl in languages %}
+      <option value="{{ code }}" {% if acc.language == code %}selected{% endif %}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <label>Время сбора</label>
+        <input type="text" name="collect_time" value="{{ acc.collect_time }}" placeholder="07:00">
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label>Размер пула</label>
+        <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
+      </div>
+    </div>
+    <label>Времена твитов <span class="muted">(через запятую)</span></label>
+    <input type="text" name="post_times" value="{{ acc.post_times }}" placeholder="11:00,18:00">
+
+    <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
+    <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
+<!-- Действия -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">Действия</h3>
+  <div class="actions" style="flex-wrap:wrap">
+    <form method="post" action="/x/{{ acc.id }}/verify">
+      <button class="primary" type="submit">Проверить ключи</button>
+    </form>
+    <form method="post" action="/x/{{ acc.id }}/collect">
+      <button type="submit">Собрать в пул</button>
+    </form>
+    <form method="post" action="/x/{{ acc.id }}/publish">
+      <button type="submit">Опубликовать твит сейчас</button>
+    </form>
+  </div>
+  {% if runs %}
+  <p class="muted" style="margin-bottom:0">Ближайшие запуски:
+    {% for r in runs %}<br>{{ r.id }} → {{ r.next_run or "—" }}{% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+<!-- Источники -->
+<div class="card">
+  <h3 style="margin-top:0;font-size:1rem">RSS-источники</h3>
+  <p class="muted" style="margin-top:0">Каждый материал прогоняется через LLM (короткий твит + хэштеги). Источники чередуются по кругу; ссылка на сайт источника добавляется в твит.</p>
+  <form method="post" action="/x/{{ acc.id }}/sources">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:120px">
+        <label style="margin-top:0">Название</label>
+        <input type="text" name="name" required placeholder="remontandroid">
+      </div>
+      <div style="flex:2;min-width:180px">
+        <label style="margin-top:0">RSS URL</label>
+        <input type="url" name="url" required placeholder="https://.../rss">
+      </div>
+      <div style="flex:2;min-width:160px">
+        <label style="margin-top:0">Ссылка на сайт</label>
+        <input type="url" name="link_url" placeholder="https://remontandroid.cz">
+      </div>
+    </div>
+    <div style="margin-top:10px"><button class="primary" type="submit">Добавить источник</button></div>
+  </form>
+
+  {% if sources %}
+    {% for src in sources %}
+    <form method="post" action="/x-sources/{{ src.id }}"
+          style="border-top:1px solid var(--b);padding-top:10px;margin-top:10px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:120px">
+          <label style="margin-top:0">Название</label>
+          <input type="text" name="name" value="{{ src.name }}" required>
+        </div>
+        <div style="flex:2;min-width:180px">
+          <label style="margin-top:0">RSS URL</label>
+          <input type="url" name="url" value="{{ src.url }}" required>
+        </div>
+        <div style="flex:2;min-width:160px">
+          <label style="margin-top:0">Ссылка на сайт</label>
+          <input type="url" name="link_url" value="{{ src.link_url }}" placeholder="https://...">
+        </div>
+      </div>
+      <div class="actions" style="margin-top:8px">
+        <button class="primary" type="submit">Сохранить</button>
+        <button class="danger" type="submit" formaction="/x-sources/{{ src.id }}/delete">Удалить</button>
+      </div>
+    </form>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Источников пока нет.</p>
+  {% endif %}
+</div>
+
+<!-- Пул материалов -->
+<h3 style="font-size:1rem">Пул материалов</h3>
+{% for status, label in [('scheduled','В пуле'), ('failed','Ошибки'), ('published','Опубликовано')] %}
+  {% set items = sections[status] %}
+  {% if items %}
+  <h4 style="margin:14px 0 6px">{{ label }} ({{ items|length }})</h4>
+    {% for p in items %}
+    <div class="card">
+      <div style="display:flex;gap:12px">
+        {% if p.image_url %}<img class="thumb" src="{{ p.image_url }}" alt="" style="max-width:120px">{% endif %}
+        <div style="flex:1">
+          <strong>{{ p.source_title or '(без названия)' }}</strong>
+          {% if p.link_url %}<div class="muted" style="margin-top:2px">🔗 {{ p.link_url }}</div>{% endif %}
+          {% if p.publish_note %}<div class="muted" style="margin-top:2px">{{ p.publish_note }}</div>{% endif %}
+        </div>
+      </div>
+      {% if status != 'published' %}
+      <form method="post" action="/x-posts/{{ p.id }}">
+        <label>Текст твита <span class="muted">(ссылка добавится автоматически; лимит 280)</span></label>
+        <textarea name="caption">{{ p.caption }}</textarea>
+        <div class="actions" style="margin-top:8px"><button class="primary" type="submit">Сохранить текст</button></div>
+      </form>
+      <div class="actions" style="margin-top:8px;flex-wrap:wrap">
+        <form method="post" action="/x-posts/{{ p.id }}/publish">
+          <button class="primary" type="submit">Опубликовать сейчас</button>
+        </form>
+        <form method="post" action="/x-posts/{{ p.id }}/delete">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="muted" style="margin-top:6px">{{ p.caption[:200] }}</div>
+      <form method="post" action="/x-posts/{{ p.id }}/delete" style="margin-top:6px">
+        <button class="danger" type="submit">Удалить из истории</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+{% if not sections['scheduled'] and not sections['failed'] and not sections['published'] %}
+  <p class="muted">Пул пуст. Нажмите «Собрать в пул».</p>
+{% endif %}
+
+{% endblock %}

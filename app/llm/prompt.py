@@ -168,6 +168,35 @@ def build_tg_prompt(config: AppConfig, news: dict, language: str | None = None) 
     return system, user
 
 
+def build_x_prompt(config: AppConfig, news: dict, language: str | None = None) -> tuple[str, str]:
+    """Промпт твита для X/Twitter. JSON {caption, hashtags}.
+
+    Жёсткий лимит: твит ≤280 символов вместе со ссылкой (она ~23) и хэштегами,
+    поэтому просим очень короткий текст. `language` — язык публикации.
+    """
+    lang = (language or config.language or "ru").strip()
+    rules = [
+        f"Piš výhradně v jazyce: {lang}.",
+        "Formát: JEDEN tweet pro X (Twitter). Text MAX 200 znaků (zbytek místa je "
+        "na odkaz a hashtagy). Úderné, lidské, klidně 1 emoji.",
+        "Bez klišé. NEzmiňuj zdroj a nevkládej do textu žádné odkazy.",
+    ]
+    if config.llm_instructions.strip():
+        rules.append(config.llm_instructions.strip())
+    rules.append(
+        "Vrať POUZE validní JSON bez dalšího textu, přesně v tomto tvaru:\n"
+        '{"caption": "...", "hashtags": ["...", "..."]}\n'
+        "- caption: text tweetu bez hashtagů, max 200 znaků;\n"
+        "- hashtags: 1–3 krátké relevantní hashtagy bez znaku #, malými písmeny."
+    )
+    system = "Jsi zkušený social media manažer pro X (Twitter). " + " ".join(rules)
+    user = (
+        f"Titulek zdroje: {news.get('title', '')}\n\n"
+        f"Text zdroje:\n{news.get('text', '')}"
+    )
+    return system, user
+
+
 def parse_ig_parts(raw: str, fallback_text: str = "") -> tuple[str, list[str]]:
     """Разобрать ответ модели на (текст подписи, список хэштегов без '#')."""
     data = _extract_json(raw) or {}
