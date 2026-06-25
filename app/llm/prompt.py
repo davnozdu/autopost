@@ -137,22 +137,30 @@ def build_ig_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
     return system, user
 
 
-def parse_ig_caption(raw: str, fallback_text: str = "") -> str:
-    """Собрать готовую подпись (текст + хэштеги) из JSON-ответа модели."""
+def parse_ig_parts(raw: str, fallback_text: str = "") -> tuple[str, list[str]]:
+    """Разобрать ответ модели на (текст подписи, список хэштегов без '#')."""
     data = _extract_json(raw) or {}
     caption = (data.get("caption") or "").strip()
     if not caption:
         caption = (fallback_text or raw or "").strip()
     tags = data.get("hashtags")
+    clean: list[str] = []
     if isinstance(tags, list):
-        clean = []
         for t in tags:
             t = str(t).strip().lstrip("#").replace(" ", "")
             if t:
-                clean.append("#" + t)
-        if clean:
-            caption = caption.rstrip() + "\n\n" + " ".join(clean[:12])
-    return caption
+                clean.append(t)
+    return caption, clean
+
+
+def build_shorten_prompt(text: str, max_chars: int, language: str) -> tuple[str, str]:
+    """Промпт сокращения текста подписи под лимит символов (без JSON)."""
+    system = (
+        f"Zkrať následující text do max {max_chars} znaků. Zachovej smysl, hlavní "
+        f"fakta a přirozený, lidský tón. Piš ve stejném jazyce ({language}). "
+        f"Vrať POUZE zkrácený text, bez uvozovek a komentářů."
+    )
+    return system, text
 
 
 def build_translate_prompt(content: dict, target_name: str) -> tuple[str, str]:

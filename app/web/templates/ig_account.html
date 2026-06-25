@@ -24,8 +24,6 @@
     <input type="text" name="password" value="" placeholder="{% if acc.password %}••••••••{% else %}пароль{% endif %}">
     <label>Прокси <span class="muted">(опц., рекомендуется для стабильности)</span></label>
     <input type="text" name="proxy" value="{{ acc.proxy }}" placeholder="http://user:pass@host:port">
-    <label>Ссылка на сайт <span class="muted">(добавляется в подпись и в стикер сториз)</span></label>
-    <input type="url" name="link_url" value="{{ acc.link_url }}" placeholder="https://remontandroid.cz">
 
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:120px">
@@ -88,40 +86,49 @@
 <!-- Источники -->
 <div class="card">
   <h3 style="margin-top:0;font-size:1rem">RSS-источники</h3>
+  <p class="muted" style="margin-top:0">Каждый материал прогоняется через LLM (summary + хэштеги). Ссылка на сайт источника добавляется в подпись и в стикер сториз.</p>
   <form method="post" action="/instagram/{{ acc.id }}/sources">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-      <div style="flex:1;min-width:140px">
+      <div style="flex:1;min-width:120px">
         <label style="margin-top:0">Название</label>
         <input type="text" name="name" required placeholder="remontandroid">
       </div>
       <div style="flex:2;min-width:180px">
         <label style="margin-top:0">RSS URL</label>
-        <input type="url" name="url" required placeholder="https://...">
+        <input type="url" name="url" required placeholder="https://.../rss">
       </div>
-      <div style="min-width:200px">
-        <label style="margin-top:0">Группа</label>
-        <select name="kind" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
-          {% for code, label in kinds %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
-        </select>
+      <div style="flex:2;min-width:160px">
+        <label style="margin-top:0">Ссылка на сайт</label>
+        <input type="url" name="link_url" placeholder="https://remontandroid.cz">
       </div>
     </div>
     <div style="margin-top:10px"><button class="primary" type="submit">Добавить источник</button></div>
   </form>
 
   {% if sources %}
-  <table style="margin-top:12px">
     {% for src in sources %}
-    <tr>
-      <td><strong>{{ src.name }}</strong><br><span class="muted">{{ src.url }}</span></td>
-      <td>{% if src.kind == 'own' %}свои сайты{% else %}внешний (LLM){% endif %}</td>
-      <td>
-        <form method="post" action="/ig-sources/{{ src.id }}/delete">
-          <button class="danger" type="submit">Удалить</button>
-        </form>
-      </td>
-    </tr>
+    <form method="post" action="/ig-sources/{{ src.id }}"
+          style="border-top:1px solid var(--b);padding-top:10px;margin-top:10px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:120px">
+          <label style="margin-top:0">Название</label>
+          <input type="text" name="name" value="{{ src.name }}" required>
+        </div>
+        <div style="flex:2;min-width:180px">
+          <label style="margin-top:0">RSS URL</label>
+          <input type="url" name="url" value="{{ src.url }}" required>
+        </div>
+        <div style="flex:2;min-width:160px">
+          <label style="margin-top:0">Ссылка на сайт</label>
+          <input type="url" name="link_url" value="{{ src.link_url }}" placeholder="https://...">
+        </div>
+      </div>
+      <div class="actions" style="margin-top:8px">
+        <button class="primary" type="submit">Сохранить</button>
+        <button class="danger" type="submit" formaction="/ig-sources/{{ src.id }}/delete">Удалить</button>
+      </div>
+    </form>
     {% endfor %}
-  </table>
   {% else %}
   <p class="muted">Источников пока нет.</p>
   {% endif %}
@@ -140,7 +147,7 @@
         <div style="flex:1">
           <strong>{{ p.source_title or '(без названия)' }}</strong>
           {% if p.kind %}<span class="muted"> · {{ p.kind }}</span>{% endif %}
-          {% if p.media_kind == 'own' %}<span class="muted"> · свой</span>{% endif %}
+          {% if p.link_url %}<div class="muted" style="margin-top:2px">🔗 {{ p.link_url }}</div>{% endif %}
           {% if p.publish_note %}<div class="muted" style="margin-top:2px">{{ p.publish_note }}</div>{% endif %}
         </div>
       </div>
@@ -155,11 +162,11 @@
       <div class="actions" style="margin-top:8px;flex-wrap:wrap">
         <form method="post" action="/ig-posts/{{ p.id }}/publish">
           <input type="hidden" name="kind" value="post">
-          <button type="submit">Опубликовать постом</button>
+          <button class="primary" type="submit">Опубликовать сейчас постом</button>
         </form>
         <form method="post" action="/ig-posts/{{ p.id }}/publish">
           <input type="hidden" name="kind" value="story">
-          <button type="submit">Опубликовать сториз</button>
+          <button type="submit">Опубликовать сейчас в сториз</button>
         </form>
         <form method="post" action="/ig-posts/{{ p.id }}/delete">
           <button class="danger" type="submit">Удалить</button>

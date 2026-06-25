@@ -13,7 +13,6 @@ from starlette.requests import Request
 from app import scheduler, services
 from app.config import get_settings
 from app.db.models import (
-    IG_SOURCE_KINDS,
     LANGUAGES,
     WEEKDAYS,
     AppConfig,
@@ -443,7 +442,6 @@ def ig_account_page(request: Request, account_id: int, msg: str = "") -> HTMLRes
         {
             "acc": acc,
             "sources": sources,
-            "kinds": IG_SOURCE_KINDS,
             "sections": sections,
             "labels": IG_STATUS_LABELS,
             "runs": runs,
@@ -459,7 +457,6 @@ def ig_save_account(
     username: str = Form(""),
     password: str = Form(""),
     proxy: str = Form(""),
-    link_url: str = Form(""),
     collect_time: str = Form("07:00"),
     post_time: str = Form("11:00"),
     story_times: str = Form("13:00,17:00,21:00"),
@@ -475,7 +472,6 @@ def ig_save_account(
         if password.strip():
             acc.password = password.strip()
         acc.proxy = proxy.strip()
-        acc.link_url = link_url.strip()
         acc.collect_time = collect_time.strip() or "07:00"
         acc.post_time = post_time.strip() or "11:00"
         acc.story_times = ",".join(
@@ -547,16 +543,34 @@ def ig_add_source(
     account_id: int,
     name: str = Form(...),
     url: str = Form(...),
-    kind: str = Form("rss"),
+    link_url: str = Form(""),
 ) -> RedirectResponse:
-    allowed = {c for c, _ in IG_SOURCE_KINDS}
     with Session(engine) as s:
         s.add(IGSource(
             account_id=account_id, name=name.strip(), url=url.strip(),
-            kind=kind if kind in allowed else "rss",
+            link_url=link_url.strip(),
         ))
         s.commit()
     return _redirect(f"/instagram/{account_id}", "Источник добавлен")
+
+
+@router.post("/ig-sources/{source_id}")
+def ig_edit_source(
+    source_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    link_url: str = Form(""),
+) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(IGSource, source_id)
+        account_id = src.account_id if src else 0
+        if src:
+            src.name = name.strip()
+            src.url = url.strip()
+            src.link_url = link_url.strip()
+            s.add(src)
+            s.commit()
+    return _redirect(f"/instagram/{account_id}", "Источник обновлён")
 
 
 @router.post("/ig-sources/{source_id}/delete")

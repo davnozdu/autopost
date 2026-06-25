@@ -19,10 +19,12 @@ from app.db.session import engine
 from app.instagram import media as ig_media
 from app.instagram.client import IGChallengeRequired, IGClient, IGError
 from app.llm.client import LLMClient, LLMError
-from app.llm.prompt import build_ig_prompt, parse_ig_caption
+from app.llm.prompt import build_ig_prompt, build_shorten_prompt, parse_ig_parts
 from app.scraper.rss import peek_feed
 
-CANDIDATE_POOL = 40  # сколько кандидатов рассматривать максимум
+CANDIDATE_POOL = 40       # сколько кандидатов рассматривать максимум
+IG_CAPTION_LIMIT = 2200   # лимит символов подписи поста в Instagram
+IG_MAX_HASHTAGS = 30      # лимит хэштегов в посте
 
 
 def _now() -> datetime:
@@ -35,12 +37,47 @@ def _media_dir() -> Path:
     return d
 
 
-def _own_caption(summary: str, title: str, link: str) -> str:
-    """Подпись для перезалива своего материала: текст + ссылка на сайт."""
-    text = (summary or title or "").strip()
+def _compose_caption(body: str, link: str, hashtags: list[str]) -> str:
+    """Собрать подпись: текст + ссылка на сайт + хэштеги (не более лимита)."""
+    parts = [body.strip()]
     if link.strip():
-        text = (text + "\n\n" + f"Подробнее: {link.strip()}").strip()
-    return text
+        parts.append(f"Подробнее: {link.strip()}")
+    cap = "\n\n".join(p for p in parts if p)
+    tags = [t.lstrip("#") for t in hashtags if t.strip()][:IG_MAX_HASHTAGS]
+    if tags:
+        cap = cap.rstrip() + "\n\n" + " ".join("#" + t for t in tags)
+    return cap
+
+
+def _shorten(client: LLMClient, config: AppConfig, text: str, max_chars: int) -> str:
+    """Сократить текст под лимит через LLM; при сбое — обрезать по словам."""
+    try:
+        system, user = build_shorten_prompt(text, max_chars, config.language)
+        res = client.chat(system, user, json_mode=False, temperature=0.4,
+                          model=(config.llm_model or None))
+        out = res.text.strip()
+        if out and len(out) <= max_chars + 50:
+            return out
+    except LLMError:
+        pass
+    cut = text[:max_chars].rsplit(" ", 1)[0].rstrip()
+    return (cut + "…") if cut else text[:max_chars]
+
+
+def _fit_caption(client: LLMClient, config: AppConfig, body: str, link: str,
+                 hashtags: list[str]) -> str:
+    """Подпись поста в пределах лимита Instagram; при превышении — саммари тела."""
+    cap = _compose_caption(body, link, hashtags)
+    if len(cap) <= IG_CAPTION_LIMIT:
+        return cap
+    # сколько символов занимает обвязка (ссылка + хэштеги) — остаток отдаём телу
+    overhead = len(_compose_caption("", link, hashtags))
+    target = max(200, IG_CAPTION_LIMIT - overhead - 20)
+    body = _shorten(client, config, body, target)
+    cap = _compose_caption(body, link, hashtags)
+    if len(cap) > IG_CAPTION_LIMIT:
+        cap = cap[: IG_CAPTION_LIMIT - 1].rstrip() + "…"
+    return cap
 
 
 def collect_account(account_id: int) -> dict:
@@ -103,29 +140,24 @@ def collect_account(account_id: int) -> dict:
             link = e.get("link", "")
             summary = e.get("summary", "")
             image = e.get("image")
-            if src.kind == "own":
-                # текст готов — только перезалив + ссылка на сайт
-                if not image:
-                    _, image = services._fetch_full(link, image, summary)
-                caption = _own_caption(summary, title, acc.link_url)
-            else:
-                # внешний RSS — полная обработка через LLM
-                text, image = services._fetch_full(link, image, summary)
-                try:
-                    system, user = build_ig_prompt(config, {"title": title, "text": text})
-                    res = client.chat(system, user, json_mode=True, temperature=0.8,
-                                      model=(config.llm_model or None))
-                    caption = parse_ig_caption(res.text, fallback_text=summary)
-                except LLMError:
-                    continue
+            link_url = src.link_url.strip()
+            # любой источник: материал через LLM → summary + хэштеги по содержимому
+            text, image = services._fetch_full(link, image, summary)
+            try:
+                system, user = build_ig_prompt(config, {"title": title, "text": text})
+                res = client.chat(system, user, json_mode=True, temperature=0.8,
+                                  model=(config.llm_model or None))
+                body, hashtags = parse_ig_parts(res.text, fallback_text=summary)
+            except LLMError:
+                continue
+            caption = _fit_caption(client, config, body, link_url, hashtags)
             s.add(IGPost(
                 account_id=account_id,
                 source_url=link,
                 source_title=title,
-                media_kind=src.kind,
                 image_url=image,
                 caption=caption,
-                link_url=acc.link_url,
+                link_url=link_url,
                 status="scheduled",
             ))
             s.commit()
