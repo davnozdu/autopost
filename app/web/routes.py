@@ -22,6 +22,9 @@ from app.db.models import (
     IGSource,
     Site,
     Source,
+    TGAccount,
+    TGPost,
+    TGSource,
 )
 from app.db.session import engine
 from app.llm.client import LLMClient, LLMError
@@ -463,6 +466,7 @@ def ig_save_account(
     post_time: str = Form("11:00"),
     story_times: str = Form("13:00,17:00,21:00"),
     collect_limit: int = Form(8),
+    story_music: bool = Form(False),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
     allowed_l = {c for c, _ in LANGUAGES}
@@ -470,6 +474,7 @@ def ig_save_account(
         acc = s.get(IGAccount, account_id)
         if not acc:
             return _redirect("/instagram", "Аккаунт не найден")
+        acc.story_music = story_music
         acc.name = name.strip()
         acc.username = username.strip()
         if password.strip():
@@ -603,9 +608,8 @@ def ig_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
 
 @router.post("/ig-posts/{post_id}/publish")
 def ig_publish_post(post_id: int, kind: str = Form("post")) -> RedirectResponse:
-    from app.instagram import media as ig_media
     from app.instagram.client import IGChallengeRequired, IGClient, IGError
-    from app.instagram.service import _media_dir, _persist_session
+    from app.instagram.service import _persist_session, _send_post
 
     as_kind = "story" if kind == "story" else "post"
     with Session(engine) as s:
@@ -622,14 +626,8 @@ def ig_publish_post(post_id: int, kind: str = Form("post")) -> RedirectResponse:
                              f"Нужен код подтверждения: {str(exc)[:100]}")
         except IGError as exc:
             return _redirect(f"/instagram/{account_id}", f"Ошибка входа: {str(exc)[:100]}")
-        img = ig_media.prepare(post.image_url, _media_dir() / f"{post.id}-{as_kind}.jpg", as_kind)
-        if not img:
-            return _redirect(f"/instagram/{account_id}", "Нет/битая картинка")
         try:
-            if as_kind == "story":
-                pk = igc.upload_story(img, caption=post.source_title or "", link=post.link_url or "")
-            else:
-                pk = igc.upload_photo(img, post.caption or "")
+            pk = _send_post(igc, acc, post, as_kind)
         except IGError as exc:
             post.status = "failed"
             post.publish_note = str(exc)[:300]
@@ -655,6 +653,239 @@ def ig_delete_post(post_id: int) -> RedirectResponse:
             s.delete(post)
             s.commit()
     return _redirect(f"/instagram/{account_id}", "Удалено")
+
+
+# ── Telegram: аккаунты ────────────────────────────────────────────────
+@router.get("/telegram", response_class=HTMLResponse)
+def tg_accounts_page(request: Request, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        accounts = s.exec(select(TGAccount).order_by(TGAccount.id)).all()
+    return templates.TemplateResponse(
+        request, "tg_accounts.html", {"accounts": accounts, "msg": msg}
+    )
+
+
+@router.post("/telegram")
+def tg_add_account(name: str = Form(...)) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = TGAccount(name=name.strip())
+        s.add(acc)
+        s.commit()
+        s.refresh(acc)
+    scheduler.reload_jobs()
+    return _redirect(f"/telegram/{acc.id}", "Аккаунт создан — заполните настройки")
+
+
+@router.get("/telegram/{account_id}", response_class=HTMLResponse)
+def tg_account_page(request: Request, account_id: int, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        acc = s.get(TGAccount, account_id)
+        if not acc:
+            return _redirect("/telegram", "Аккаунт не найден")
+        sources = s.exec(
+            select(TGSource).where(TGSource.account_id == account_id).order_by(TGSource.id)
+        ).all()
+        posts = s.exec(
+            select(TGPost)
+            .where(TGPost.account_id == account_id)
+            .order_by(TGPost.created_at.desc())
+        ).all()
+    sections = {"draft": [], "scheduled": [], "published": [], "failed": []}
+    for p in posts:
+        sections.get(p.status, sections["draft"]).append(p)
+    runs = [j for j in scheduler.jobs_info()
+            if j["id"].startswith("tg-")
+            and j["id"].split("-")[2:3] == [str(account_id)]]
+    return templates.TemplateResponse(
+        request,
+        "tg_account.html",
+        {
+            "acc": acc,
+            "sources": sources,
+            "languages": LANGUAGES,
+            "sections": sections,
+            "labels": IG_STATUS_LABELS,
+            "runs": runs,
+            "msg": msg,
+        },
+    )
+
+
+@router.post("/telegram/{account_id}")
+def tg_save_account(
+    account_id: int,
+    name: str = Form(...),
+    bot_token: str = Form(""),
+    chat_id: str = Form(""),
+    language: str = Form("ru"),
+    collect_time: str = Form("07:00"),
+    post_times: str = Form("11:00,18:00"),
+    collect_limit: int = Form(8),
+    enabled: bool = Form(False),
+) -> RedirectResponse:
+    allowed_l = {c for c, _ in LANGUAGES}
+    with Session(engine) as s:
+        acc = s.get(TGAccount, account_id)
+        if not acc:
+            return _redirect("/telegram", "Аккаунт не найден")
+        acc.name = name.strip()
+        if bot_token.strip():
+            acc.bot_token = bot_token.strip()
+        acc.chat_id = chat_id.strip()
+        acc.language = language if language in allowed_l else "ru"
+        acc.collect_time = collect_time.strip() or "07:00"
+        acc.post_times = ",".join(
+            t.strip() for t in post_times.split(",") if t.strip()
+        ) or "11:00,18:00"
+        acc.collect_limit = max(1, collect_limit)
+        acc.enabled = enabled
+        s.add(acc)
+        s.commit()
+    scheduler.reload_jobs()
+    return _redirect(f"/telegram/{account_id}", "Настройки аккаунта сохранены")
+
+
+@router.post("/telegram/{account_id}/delete")
+def tg_delete_account(account_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        acc = s.get(TGAccount, account_id)
+        if acc:
+            for src in s.exec(
+                select(TGSource).where(TGSource.account_id == account_id)
+            ).all():
+                s.delete(src)
+            for p in s.exec(
+                select(TGPost).where(TGPost.account_id == account_id)
+            ).all():
+                s.delete(p)
+            s.delete(acc)
+            s.commit()
+    scheduler.reload_jobs()
+    return _redirect("/telegram", "Аккаунт удалён")
+
+
+@router.post("/telegram/{account_id}/verify")
+def tg_verify(account_id: int) -> RedirectResponse:
+    from app.telegram.service import verify_account
+
+    res = verify_account(account_id)
+    msg = res.get("note", "")[:160] if res.get("ok") else f"Ошибка: {res.get('note', '')[:140]}"
+    return _redirect(f"/telegram/{account_id}", msg)
+
+
+@router.post("/telegram/{account_id}/collect")
+def tg_collect_now(account_id: int) -> RedirectResponse:
+    from app.telegram.service import collect_account
+
+    res = collect_account(account_id)
+    return _redirect(f"/telegram/{account_id}", f"Собрано в пул: {res.get('created', 0)}")
+
+
+@router.post("/telegram/{account_id}/publish")
+def tg_publish_now(account_id: int) -> RedirectResponse:
+    from app.telegram.service import run_tg_publish
+
+    res = run_tg_publish(account_id, count=1)
+    return _redirect(f"/telegram/{account_id}",
+                     f"{res.get('note', '')} (опубликовано {res.get('published', 0)})")
+
+
+# ── Telegram: источники и посты ───────────────────────────────────────
+@router.post("/telegram/{account_id}/sources")
+def tg_add_source(
+    account_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    link_url: str = Form(""),
+) -> RedirectResponse:
+    with Session(engine) as s:
+        s.add(TGSource(
+            account_id=account_id, name=name.strip(), url=url.strip(),
+            link_url=link_url.strip(),
+        ))
+        s.commit()
+    return _redirect(f"/telegram/{account_id}", "Источник добавлен")
+
+
+@router.post("/tg-sources/{source_id}")
+def tg_edit_source(
+    source_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    link_url: str = Form(""),
+) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(TGSource, source_id)
+        account_id = src.account_id if src else 0
+        if src:
+            src.name = name.strip()
+            src.url = url.strip()
+            src.link_url = link_url.strip()
+            s.add(src)
+            s.commit()
+    return _redirect(f"/telegram/{account_id}", "Источник обновлён")
+
+
+@router.post("/tg-sources/{source_id}/delete")
+def tg_delete_source(source_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(TGSource, source_id)
+        account_id = src.account_id if src else 0
+        if src:
+            s.delete(src)
+            s.commit()
+    return _redirect(f"/telegram/{account_id}", "Источник удалён")
+
+
+@router.post("/tg-posts/{post_id}")
+def tg_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
+    with Session(engine) as s:
+        post = s.get(TGPost, post_id)
+        if not post:
+            return _redirect("/telegram", "Не найдено")
+        post.caption = caption
+        s.add(post)
+        s.commit()
+        account_id = post.account_id
+    return _redirect(f"/telegram/{account_id}", "Подпись сохранена")
+
+
+@router.post("/tg-posts/{post_id}/publish")
+def tg_publish_post(post_id: int) -> RedirectResponse:
+    from app.telegram.client import TGClient, TGError
+
+    with Session(engine) as s:
+        post = s.get(TGPost, post_id)
+        if not post:
+            return _redirect("/telegram", "Не найдено")
+        account_id = post.account_id
+        acc = s.get(TGAccount, account_id)
+        try:
+            mid = TGClient(acc).send_post(post.caption, post.image_url, post.link_url or "")
+        except TGError as exc:
+            post.status = "failed"
+            post.publish_note = str(exc)[:300]
+            s.add(post)
+            s.commit()
+            return _redirect(f"/telegram/{account_id}", f"Ошибка: {str(exc)[:100]}")
+        post.status = "published"
+        post.message_id = mid
+        post.published_at = datetime.now(timezone.utc)
+        post.publish_note = "опубликовано вручную"
+        s.add(post)
+        s.commit()
+    return _redirect(f"/telegram/{account_id}", "Опубликовано в Telegram")
+
+
+@router.post("/tg-posts/{post_id}/delete")
+def tg_delete_post(post_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        post = s.get(TGPost, post_id)
+        account_id = post.account_id if post else 0
+        if post:
+            s.delete(post)
+            s.commit()
+    return _redirect(f"/telegram/{account_id}", "Удалено")
 
 
 # ── Глобальные настройки LLM ──────────────────────────────────────────

@@ -1,29 +1,27 @@
 {% extends "base.html" %}
-{% block title %}{{ acc.name }} — Instagram{% endblock %}
+{% block title %}{{ acc.name }} — Telegram{% endblock %}
 {% block content %}
 
-<p><a href="/instagram">← Все аккаунты</a></p>
+<p><a href="/telegram">← Все аккаунты</a></p>
 <h2 style="font-size:1.15rem;margin-bottom:4px">{{ acc.name }}</h2>
 
-{% if acc.login_status %}
-<div class="card" style="border-color:{% if acc.login_status=='ok' %}#a7f3d0{% elif acc.login_status=='challenge' %}#fde68a{% else %}#fecaca{% endif %}">
-  <strong>Состояние входа:</strong> {{ acc.login_status }}
-  {% if acc.login_note %}<div class="muted" style="margin-top:4px">{{ acc.login_note }}</div>{% endif %}
+{% if acc.verify_status %}
+<div class="card" style="border-color:{% if acc.verify_status=='ok' %}#a7f3d0{% else %}#fecaca{% endif %}">
+  <strong>Проверка бота:</strong> {{ acc.verify_status }}
+  {% if acc.verify_note %}<div class="muted" style="margin-top:4px">{{ acc.verify_note }}</div>{% endif %}
 </div>
 {% endif %}
 
 <!-- Настройки аккаунта -->
 <div class="card">
   <h3 style="margin-top:0;font-size:1rem">Настройки аккаунта</h3>
-  <form method="post" action="/instagram/{{ acc.id }}">
+  <form method="post" action="/telegram/{{ acc.id }}">
     <label>Название</label>
     <input type="text" name="name" value="{{ acc.name }}" required>
-    <label>Логин Instagram</label>
-    <input type="text" name="username" value="{{ acc.username }}" placeholder="username">
-    <label>Пароль {% if acc.password %}<span class="muted">(оставьте пустым, чтобы не менять)</span>{% endif %}</label>
-    <input type="text" name="password" value="" placeholder="{% if acc.password %}••••••••{% else %}пароль{% endif %}">
-    <label>Прокси <span class="muted">(опц., рекомендуется для стабильности)</span></label>
-    <input type="text" name="proxy" value="{{ acc.proxy }}" placeholder="http://user:pass@host:port">
+    <label>Токен бота <span class="muted">(@BotFather){% if acc.bot_token %} — оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="bot_token" value="" placeholder="{% if acc.bot_token %}••••••••{% else %}123456:ABC-DEF...{% endif %}">
+    <label>chat_id группы/канала <span class="muted">(@username или числовой id; бот должен быть участником)</span></label>
+    <input type="text" name="chat_id" value="{{ acc.chat_id }}" placeholder="@mychannel или -1001234567890">
     <label>Язык публикации <span class="muted">(на нём LLM готовит подпись)</span></label>
     <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
       {% for code, lbl in languages %}
@@ -37,50 +35,30 @@
         <input type="text" name="collect_time" value="{{ acc.collect_time }}" placeholder="07:00">
       </div>
       <div style="flex:1;min-width:120px">
-        <label>Время поста</label>
-        <input type="text" name="post_time" value="{{ acc.post_time }}" placeholder="11:00">
-      </div>
-      <div style="flex:1;min-width:120px">
         <label>Размер пула</label>
         <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
       </div>
     </div>
-    <label>Времена сториз <span class="muted">(через запятую, 2–3 в день)</span></label>
-    <input type="text" name="story_times" value="{{ acc.story_times }}" placeholder="13:00,17:00,21:00">
+    <label>Времена постов <span class="muted">(через запятую; сториз в Telegram нет)</span></label>
+    <input type="text" name="post_times" value="{{ acc.post_times }}" placeholder="11:00,18:00">
 
-    <label style="margin-top:12px"><input type="checkbox" name="story_music" {% if acc.story_music %}checked{% endif %}> Добавлять музыку из библиотеки Instagram к сториз</label>
-    <label><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
+    <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
 </div>
 
-<!-- Вход -->
-<div class="card">
-  <h3 style="margin-top:0;font-size:1rem">Вход в Instagram</h3>
-  <p class="muted" style="margin-top:0">Сессия сохраняется, чтобы не входить каждый раз. Если запросят код (2FA/проверка) — введите его и повторите.</p>
-  <form method="post" action="/instagram/{{ acc.id }}/login" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-    <div style="flex:1;min-width:160px">
-      <label style="margin-top:0">Код подтверждения (если нужен)</label>
-      <input type="text" name="verification_code" placeholder="6 цифр / резервный код">
-    </div>
-    <button class="primary" type="submit">Войти / проверить</button>
-  </form>
-</div>
-
-<!-- Действия -->
+<!-- Проверка и действия -->
 <div class="card">
   <h3 style="margin-top:0;font-size:1rem">Действия</h3>
   <div class="actions" style="flex-wrap:wrap">
-    <form method="post" action="/instagram/{{ acc.id }}/collect">
-      <button class="primary" type="submit">Собрать в пул</button>
+    <form method="post" action="/telegram/{{ acc.id }}/verify">
+      <button class="primary" type="submit">Проверить бота</button>
     </form>
-    <form method="post" action="/instagram/{{ acc.id }}/publish">
-      <input type="hidden" name="kind" value="post">
+    <form method="post" action="/telegram/{{ acc.id }}/collect">
+      <button type="submit">Собрать в пул</button>
+    </form>
+    <form method="post" action="/telegram/{{ acc.id }}/publish">
       <button type="submit">Опубликовать пост сейчас</button>
-    </form>
-    <form method="post" action="/instagram/{{ acc.id }}/publish">
-      <input type="hidden" name="kind" value="story">
-      <button type="submit">Опубликовать сториз сейчас</button>
     </form>
   </div>
   {% if runs %}
@@ -93,8 +71,8 @@
 <!-- Источники -->
 <div class="card">
   <h3 style="margin-top:0;font-size:1rem">RSS-источники</h3>
-  <p class="muted" style="margin-top:0">Каждый материал прогоняется через LLM (summary + хэштеги). Ссылка на сайт источника добавляется в подпись и в стикер сториз.</p>
-  <form method="post" action="/instagram/{{ acc.id }}/sources">
+  <p class="muted" style="margin-top:0">Каждый материал прогоняется через LLM (summary + хэштеги). Источники чередуются по кругу; ссылка на сайт источника добавляется в пост (кликабельно).</p>
+  <form method="post" action="/telegram/{{ acc.id }}/sources">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:120px">
         <label style="margin-top:0">Название</label>
@@ -114,7 +92,7 @@
 
   {% if sources %}
     {% for src in sources %}
-    <form method="post" action="/ig-sources/{{ src.id }}"
+    <form method="post" action="/tg-sources/{{ src.id }}"
           style="border-top:1px solid var(--b);padding-top:10px;margin-top:10px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
         <div style="flex:1;min-width:120px">
@@ -132,7 +110,7 @@
       </div>
       <div class="actions" style="margin-top:8px">
         <button class="primary" type="submit">Сохранить</button>
-        <button class="danger" type="submit" formaction="/ig-sources/{{ src.id }}/delete">Удалить</button>
+        <button class="danger" type="submit" formaction="/tg-sources/{{ src.id }}/delete">Удалить</button>
       </div>
     </form>
     {% endfor %}
@@ -153,35 +131,27 @@
         {% if p.image_url %}<img class="thumb" src="{{ p.image_url }}" alt="" style="max-width:120px">{% endif %}
         <div style="flex:1">
           <strong>{{ p.source_title or '(без названия)' }}</strong>
-          {% if p.kind %}<span class="muted"> · {{ p.kind }}</span>{% endif %}
           {% if p.link_url %}<div class="muted" style="margin-top:2px">🔗 {{ p.link_url }}</div>{% endif %}
           {% if p.publish_note %}<div class="muted" style="margin-top:2px">{{ p.publish_note }}</div>{% endif %}
         </div>
       </div>
       {% if status != 'published' %}
-      <form method="post" action="/ig-posts/{{ p.id }}">
+      <form method="post" action="/tg-posts/{{ p.id }}">
         <label>Подпись</label>
         <textarea name="caption">{{ p.caption }}</textarea>
-        <div class="actions" style="margin-top:8px;flex-wrap:wrap">
-          <button class="primary" type="submit">Сохранить подпись</button>
-        </div>
+        <div class="actions" style="margin-top:8px"><button class="primary" type="submit">Сохранить подпись</button></div>
       </form>
       <div class="actions" style="margin-top:8px;flex-wrap:wrap">
-        <form method="post" action="/ig-posts/{{ p.id }}/publish">
-          <input type="hidden" name="kind" value="post">
-          <button class="primary" type="submit">Опубликовать сейчас постом</button>
+        <form method="post" action="/tg-posts/{{ p.id }}/publish">
+          <button class="primary" type="submit">Опубликовать сейчас</button>
         </form>
-        <form method="post" action="/ig-posts/{{ p.id }}/publish">
-          <input type="hidden" name="kind" value="story">
-          <button type="submit">Опубликовать сейчас в сториз</button>
-        </form>
-        <form method="post" action="/ig-posts/{{ p.id }}/delete">
+        <form method="post" action="/tg-posts/{{ p.id }}/delete">
           <button class="danger" type="submit">Удалить</button>
         </form>
       </div>
       {% else %}
       <div class="muted" style="margin-top:6px">{{ p.caption[:200] }}</div>
-      <form method="post" action="/ig-posts/{{ p.id }}/delete" style="margin-top:6px">
+      <form method="post" action="/tg-posts/{{ p.id }}/delete" style="margin-top:6px">
         <button class="danger" type="submit">Удалить из истории</button>
       </form>
       {% endif %}

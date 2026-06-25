@@ -7,6 +7,7 @@
 лучший материал выбирает LLM.
 """
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -274,6 +275,40 @@ def login_account(account_id: int, verification_code: str = "") -> dict:
         return {"ok": True, "note": "Вход выполнен"}
 
 
+def _story_overlay(post: IGPost) -> tuple[str, list[str]]:
+    """Текст для наложения на сториз: пара предложений + хэштеги (из подписи)."""
+    cap = post.caption or ""
+    tags = re.findall(r"#(\w+)", cap)
+    body = re.sub(r"#\w+", "", cap)  # убрать хэштеги из тела
+    body = re.sub(r"\s+", " ", body).strip()
+    title = body or post.source_title or ""
+    # пара предложений / до ~180 символов
+    text = ""
+    for sn in re.split(r"(?<=[.!?])\s+", title):
+        if text and len(text) + len(sn) > 180:
+            break
+        text = (text + " " + sn).strip()
+    return text[:200], tags[:5]
+
+
+def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str:
+    """Подготовить медиа и опубликовать (пост или сториз с текстом+музыкой). → pk."""
+    if as_kind == "story":
+        title, tags = _story_overlay(post)
+        img = ig_media.prepare(
+            post.image_url, _media_dir() / f"{post.id}-story.jpg", "story",
+            overlay_title=title, overlay_tags=tags,
+        )
+        if not img:
+            raise IGError("нет/битая картинка")
+        return igc.upload_story(img, caption=post.source_title or "",
+                                link=post.link_url or "", with_music=acc.story_music)
+    img = ig_media.prepare(post.image_url, _media_dir() / f"{post.id}-post.jpg", "post")
+    if not img:
+        raise IGError("нет/битая картинка")
+    return igc.upload_photo(img, post.caption or "")
+
+
 def run_ig_publish(account_id: int, as_kind: str, count: int = 1) -> dict:
     """Опубликовать `count` материалов из пула как пост (feed) или сториз.
 
@@ -310,20 +345,8 @@ def run_ig_publish(account_id: int, as_kind: str, count: int = 1) -> dict:
         published = 0
         errors: list[str] = []
         for post in pending[:count]:
-            img_path = ig_media.prepare(
-                post.image_url, _media_dir() / f"{post.id}-{as_kind}.jpg", as_kind
-            )
-            if not img_path:
-                post.status = "failed"
-                post.publish_note = "нет/битая картинка"
-                s.add(post)
-                continue
             try:
-                if as_kind == "story":
-                    pk = igc.upload_story(img_path, caption=post.source_title or "",
-                                          link=post.link_url or "")
-                else:
-                    pk = igc.upload_photo(img_path, post.caption or "")
+                pk = _send_post(igc, acc, post, as_kind)
             except IGError as exc:
                 post.status = "failed"
                 post.publish_note = str(exc)[:300]

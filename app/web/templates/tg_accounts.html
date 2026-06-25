@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Telegram{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2 style="font-size:1.05rem;margin-top:0">Добавить аккаунт Telegram</h2>
+  <form method="post" action="/telegram">
+    <label>Название (для себя)</label>
+    <input type="text" name="name" required placeholder="Мой канал">
+    <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
+  </form>
+  <p class="muted" style="margin-bottom:0">
+    Внутри задаются токен бота (@BotFather), chat_id группы/канала, язык, расписание и RSS-источники.
+    Бот должен быть добавлен в группу/канал с правом публикации.
+  </p>
+</div>
+
+<h2 style="font-size:1.05rem">Аккаунты</h2>
+{% if accounts %}
+  {% for acc in accounts %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+      <strong>{{ acc.name }}{% if acc.chat_id %} <span class="muted">{{ acc.chat_id }}</span>{% endif %}</strong>
+      <div class="actions">
+        <a href="/telegram/{{ acc.id }}"><button type="button" class="primary">Настроить</button></a>
+        <form method="post" action="/telegram/{{ acc.id }}/delete"
+              onsubmit="return confirm('Удалить аккаунт и его источники?')">
+          <button class="danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      {% if acc.enabled %}активен{% else %}выключен{% endif %}
+      · посты: {{ acc.post_times }} · язык: {{ acc.language.upper() }}
+      {% if acc.verify_status %} · бот: {{ acc.verify_status }}{% endif %}
+    </p>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Пока нет аккаунтов. Создайте первый.</p>
+{% endif %}
+
+{% endblock %}

@@ -137,6 +137,7 @@ class IGAccount(SQLModel, table=True):
     story_times: str = "13:00,17:00,21:00"  # времена публикации сториз (2–3 в день)
     collect_limit: int = 8       # сколько материалов готовить за один сбор (пул)
     last_source_id: int = 0      # курсор ротации источников (для равномерного чередования)
+    story_music: bool = True     # добавлять музыку из библиотеки Instagram к сториз
     enabled: bool = True
     # Состояние входа (для админки): "", ok, challenge, error
     login_status: str = ""
@@ -174,6 +175,61 @@ class IGPost(SQLModel, table=True):
     published_at: datetime | None = None
     publish_note: str = ""
     ig_media_pk: str = ""        # id опубликованного медиа в Instagram
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ── Telegram (соцсети) ────────────────────────────────────────────────
+# По аналогии с Instagram: TGAccount → TGSource → TGPost. Публикация через
+# официальный Bot API (токен + chat_id группы/канала), без сессий/2FA.
+# Сториз нет — только посты (фото+подпись или текст). Ссылка кликабельная (HTML).
+
+
+class TGAccount(SQLModel, table=True):
+    """Telegram-бот + чат назначения (группа/канал) и расписание."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    bot_token: str = ""          # токен бота от @BotFather (хранится как github_token)
+    chat_id: str = ""            # @username канала или числовой id группы (бот должен быть в ней)
+    language: str = "ru"         # язык публикации: на нём LLM готовит подпись
+    collect_time: str = "07:00"  # когда готовить пул постов
+    post_times: str = "11:00,18:00"  # времена публикации постов (сториз в TG нет)
+    collect_limit: int = 8       # размер пула за сбор
+    last_source_id: int = 0      # курсор ротации источников
+    enabled: bool = True
+    verify_status: str = ""      # "", ok, error — результат проверки бота
+    verify_note: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class TGSource(SQLModel, table=True):
+    """RSS-источник для Telegram-аккаунта."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    name: str
+    url: str
+    link_url: str = ""           # ссылка на сайт источника: добавляется в подпись (кликабельно)
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=_now)
+
+
+class TGPost(SQLModel, table=True):
+    """Подготовленный материал для Telegram (пост в чат)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(default=0, index=True)
+    source_id: int = 0
+    source_url: str = Field(default="", index=True)
+    source_title: str = ""
+    image_url: str | None = None
+    caption: str = ""            # готовая подпись (текст + хэштеги, без HTML-ссылки)
+    link_url: str = ""           # ссылка на сайт (кликабельной делается при отправке)
+    status: str = "scheduled"    # draft | scheduled | published | failed
+    publish_at: datetime | None = None
+    published_at: datetime | None = None
+    publish_note: str = ""
+    message_id: str = ""         # id отправленного сообщения
     created_at: datetime = Field(default_factory=_now)
 
 

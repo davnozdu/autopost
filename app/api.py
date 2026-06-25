@@ -202,6 +202,28 @@ def ig_publish(account_id: int, kind: str = "post") -> dict:
     return run_ig_publish(account_id, "story" if kind == "story" else "post", count=1)
 
 
+# ── Telegram ──────────────────────────────────────────────────────────
+@api_router.post("/tg/{account_id}/verify", dependencies=[Depends(require_api_key)])
+def tg_verify(account_id: int) -> dict:
+    from app.telegram.service import verify_account
+
+    return verify_account(account_id)
+
+
+@api_router.post("/tg/{account_id}/collect", dependencies=[Depends(require_api_key)])
+def tg_collect(account_id: int) -> dict:
+    from app.telegram.service import collect_account
+
+    return collect_account(account_id)
+
+
+@api_router.post("/tg/{account_id}/publish", dependencies=[Depends(require_api_key)])
+def tg_publish(account_id: int) -> dict:
+    from app.telegram.service import run_tg_publish
+
+    return run_tg_publish(account_id, count=1)
+
+
 # ── LLM ───────────────────────────────────────────────────────────────
 @api_router.post("/llm/test", dependencies=[Depends(require_api_key)])
 def llm_test() -> dict:

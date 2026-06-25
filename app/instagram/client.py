@@ -86,8 +86,24 @@ class IGClient:
             raise IGError(f"Ошибка публикации поста: {exc}")
         return str(getattr(media, "pk", "") or "")
 
-    def upload_story(self, path: Path, caption: str = "", link: str = "") -> str:
-        """Опубликовать сториз (с кликабельным стикером-ссылкой при наличии link)."""
+    def _pick_track(self):
+        """Любой трек из библиотеки Instagram (лицензированный) — для сториз."""
+        for q in ("trending", "pop", "vibe", "hits", "music"):
+            try:
+                tracks = self.cl.search_music(q)
+            except Exception:
+                tracks = None
+            if tracks:
+                return tracks[0]
+        return None
+
+    def upload_story(self, path: Path, caption: str = "", link: str = "",
+                     with_music: bool = False) -> str:
+        """Опубликовать сториз. with_music → подложить трек из библиотеки Instagram.
+
+        Кликабельный стикер-ссылка добавляется при наличии link. Если музыка не
+        получилась (нет трека/ffmpeg/ошибка рендера) — публикуем обычную сториз.
+        """
         links = []
         if link.strip():
             try:
@@ -96,6 +112,17 @@ class IGClient:
                 links = [StoryLink(webUri=link.strip())]
             except Exception:
                 links = []
+        if with_music:
+            try:
+                track = self._pick_track()
+                if track is not None:
+                    story = self.cl.photo_upload_to_story_with_music(
+                        Path(path), caption=caption, track=track, links=links,
+                        duration=15.0,
+                    )
+                    return str(getattr(story, "pk", "") or "")
+            except Exception:
+                pass  # откат на обычную сторис без музыки
         try:
             story = self.cl.photo_upload_to_story(
                 Path(path), caption=caption, links=links

@@ -14,9 +14,10 @@ from sqlmodel import Session, select
 
 from app import services
 from app.config import get_settings
-from app.db.models import IGAccount, Site
+from app.db.models import IGAccount, Site, TGAccount
 from app.db.session import engine
 from app.instagram import service as ig_service
+from app.telegram import service as tg_service
 
 _scheduler: BackgroundScheduler | None = None
 
@@ -50,6 +51,9 @@ def reload_jobs() -> None:
         sites = s.exec(select(Site).where(Site.enabled == True)).all()  # noqa: E712
         ig_accounts = s.exec(
             select(IGAccount).where(IGAccount.enabled == True)  # noqa: E712
+        ).all()
+        tg_accounts = s.exec(
+            select(TGAccount).where(TGAccount.enabled == True)  # noqa: E712
         ).all()
     tz = _tz()
     for site in sites:
@@ -93,6 +97,25 @@ def reload_jobs() -> None:
                     CronTrigger(hour=sh, minute=sm, timezone=tz),
                     args=[acc.id, "story"], id=f"ig-story-{acc.id}-{i}",
                     replace_existing=True,
+                )
+        except Exception:
+            continue
+
+    # Telegram-аккаунты: ежедневный сбор + посты по списку времён (сториз нет).
+    for acc in tg_accounts:
+        try:
+            cch, ccm = services._parse_hhmm(acc.collect_time)
+            _scheduler.add_job(
+                tg_service.collect_account,
+                CronTrigger(hour=cch, minute=ccm, timezone=tz),
+                args=[acc.id], id=f"tg-collect-{acc.id}", replace_existing=True,
+            )
+            for i, t in enumerate(x for x in acc.post_times.split(",") if x.strip()):
+                ph, pm = services._parse_hhmm(t.strip())
+                _scheduler.add_job(
+                    tg_service.run_tg_publish,
+                    CronTrigger(hour=ph, minute=pm, timezone=tz),
+                    args=[acc.id], id=f"tg-post-{acc.id}-{i}", replace_existing=True,
                 )
         except Exception:
             continue

@@ -139,6 +139,35 @@ def build_ig_prompt(config: AppConfig, news: dict, language: str | None = None) 
     return system, user
 
 
+def build_tg_prompt(config: AppConfig, news: dict, language: str | None = None) -> tuple[str, str]:
+    """Промпт подписи для Telegram-поста. JSON {caption, hashtags}.
+
+    Telegram позволяет чуть более развёрнутый текст, чем Instagram, и меньше
+    тяготеет к хэштегам. `language` — язык публикации аккаунта.
+    """
+    lang = (language or config.language or "ru").strip()
+    rules = [
+        f"Piš výhradně v jazyce: {lang}.",
+        "Formát: poutavý příspěvek pro Telegram, 2–5 krátkých odstavců, lidský tón, "
+        "klidně 1–2 emoji. První věta musí zaujmout.",
+        "Bez klišé. NEzmiňuj zdroj a nevkládej do textu žádné odkazy.",
+    ]
+    if config.llm_instructions.strip():
+        rules.append(config.llm_instructions.strip())
+    rules.append(
+        "Vrať POUZE validní JSON bez dalšího textu, přesně v tomto tvaru:\n"
+        '{"caption": "...", "hashtags": ["...", "..."]}\n'
+        "- caption: text příspěvku bez hashtagů;\n"
+        "- hashtags: 2–5 relevantních hashtagů bez znaku #, malými písmeny."
+    )
+    system = "Jsi zkušený editor Telegram kanálu. " + " ".join(rules)
+    user = (
+        f"Titulek zdroje: {news.get('title', '')}\n\n"
+        f"Text zdroje:\n{news.get('text', '')}"
+    )
+    return system, user
+
+
 def parse_ig_parts(raw: str, fallback_text: str = "") -> tuple[str, list[str]]:
     """Разобрать ответ модели на (текст подписи, список хэштегов без '#')."""
     data = _extract_json(raw) or {}
