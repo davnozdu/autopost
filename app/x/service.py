@@ -182,7 +182,7 @@ def verify_account(account_id: int) -> dict:
         if not acc:
             return {"ok": False, "note": "no account"}
         try:
-            info = XClient(acc).verify()
+            XClient(acc).verify()
         except XError as exc:
             acc.verify_status = "error"
             acc.verify_note = str(exc)[:300]
@@ -190,7 +190,7 @@ def verify_account(account_id: int) -> dict:
             s.commit()
             return {"ok": False, "note": str(exc)}
         acc.verify_status = "ok"
-        acc.verify_note = f"аккаунт @{info['username']}"
+        acc.verify_note = "cookie валидны — постинг доступен"
         s.add(acc)
         s.commit()
         return {"ok": True, "note": acc.verify_note}

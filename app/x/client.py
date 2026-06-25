@@ -28,19 +28,27 @@ class XClient:
         ensure_on_path()  # использовать обновлённый twikit из тома, если есть
         from twikit import Client
 
+        from app.x._patch import apply_patch
+
+        apply_patch()  # фикс x-client-transaction-id (KEY_BYTE) для twikit 2.3.3
         c = Client("en-US")
         c.set_cookies({"auth_token": self.auth_token, "ct0": self.ct0})
         return c
 
     def verify(self) -> dict:
-        """Проверить cookie: вернуть @screen_name аккаунта."""
+        """Проверить, что cookie валидны (аутентифицированный запрос).
+
+        Используем поиск (не требует cookie `twid`/user_id, в отличие от user()),
+        чтобы подтвердить, что auth_token+ct0 рабочие — этого же достаточно для постинга.
+        """
         async def _run():
             c = self._new_client()
-            u = await c.user()
-            return {"username": getattr(u, "screen_name", "") or getattr(u, "name", "")}
+            await c.search_tweet("news", "Top", count=1)
+            return {"ok": True}
 
         try:
-            return asyncio.run(_run())
+            asyncio.run(_run())
+            return {"ok": True}
         except Exception as exc:
             raise XError(f"Проверка не удалась (cookie неверны/протухли?): {exc}")
 
