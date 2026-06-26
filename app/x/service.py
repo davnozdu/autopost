@@ -283,3 +283,29 @@ def _notify(area: str, detail: str) -> None:
         notify_error(area, detail)
     except Exception:
         pass
+
+
+def publish_post(post_id: int) -> tuple[bool, str]:
+    """Опубликовать один твит из пула по id. → (ok, заметка)."""
+    with Session(engine) as s:
+        post = s.get(XPost, post_id)
+        if not post or post.status == "published":
+            return False, "не найдено или уже опубликовано"
+        acc = s.get(XAccount, post.account_id)
+        if not acc:
+            return False, "аккаунт не найден"
+        try:
+            tid = _send(XClient(acc), post)
+        except XError as exc:
+            post.status = "failed"
+            post.publish_note = str(exc)[:300]
+            s.add(post)
+            s.commit()
+            return False, str(exc)[:150]
+        post.status = "published"
+        post.tweet_id = tid
+        post.published_at = _now()
+        post.publish_note = "опубликовано из бота"
+        s.add(post)
+        s.commit()
+        return True, f"X «{acc.name}»: опубликовано"

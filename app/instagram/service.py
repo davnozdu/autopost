@@ -380,3 +380,40 @@ def _notify(area: str, detail: str) -> None:
         notify_error(area, detail)
     except Exception:
         pass
+
+
+def publish_post(post_id: int, as_kind: str = "post") -> tuple[bool, str]:
+    """Опубликовать один материал из пула по id (пост или сториз). → (ok, заметка)."""
+    with Session(engine) as s:
+        post = s.get(IGPost, post_id)
+        if not post or post.status == "published":
+            return False, "не найдено или уже опубликовано"
+        acc = s.get(IGAccount, post.account_id)
+        if not acc:
+            return False, "аккаунт не найден"
+        try:
+            igc = IGClient(acc)
+            igc.ensure_login()
+        except IGChallengeRequired as exc:
+            return False, f"нужен код подтверждения: {str(exc)[:120]}"
+        except IGError as exc:
+            return False, f"вход: {str(exc)[:120]}"
+        kind = "story" if as_kind == "story" else "post"
+        try:
+            pk = _send_post(igc, acc, post, kind)
+        except IGError as exc:
+            post.status = "failed"
+            post.publish_note = str(exc)[:300]
+            s.add(post)
+            s.commit()
+            return False, str(exc)[:150]
+        post.status = "published"
+        post.kind = kind
+        post.ig_media_pk = pk
+        post.published_at = _now()
+        post.publish_note = "опубликовано из бота"
+        if kind == "story" and getattr(igc, "music_note", ""):
+            post.publish_note += " | " + igc.music_note
+        s.add(post)
+        _persist_session(s, acc, igc, "ok")
+        return True, f"Instagram «{acc.name}»: опубликовано ({kind})"
