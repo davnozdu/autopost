@@ -23,6 +23,7 @@ from app.x import service as x_service
 _scheduler: BackgroundScheduler | None = None
 
 IG_JITTER = 300  # случайный сдвиг публикаций Instagram, ±5 минут
+DEFAULT_JITTER_MIN = 15  # если у аккаунта jitter_min не задан (0) — берём это (±мин)
 
 
 def _tz() -> ZoneInfo:
@@ -112,7 +113,8 @@ def reload_jobs() -> None:
     # по списку времён; во всех случаях случайный сдвиг ±jitter_min минут.
     for acc in tg_accounts:
         try:
-            jit = max(0, acc.jitter_min) * 60
+            jit = (acc.jitter_min if acc.jitter_min and acc.jitter_min > 0
+                   else DEFAULT_JITTER_MIN) * 60
             cch, ccm = services._parse_hhmm(acc.collect_time)
             _scheduler.add_job(
                 tg_service.collect_account,
@@ -140,7 +142,8 @@ def reload_jobs() -> None:
     # «через раз» (skippable), чтобы выходило то 1, то 2 в день; плюс месячный лимит.
     for acc in x_accounts:
         try:
-            jit = max(0, acc.jitter_min) * 60
+            jit = (acc.jitter_min if acc.jitter_min and acc.jitter_min > 0
+                   else DEFAULT_JITTER_MIN) * 60
             cch, ccm = services._parse_hhmm(acc.collect_time)
             _scheduler.add_job(
                 x_service.collect_account,

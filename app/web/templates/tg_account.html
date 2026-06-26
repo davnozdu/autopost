@@ -20,8 +20,10 @@
     <input type="text" name="name" value="{{ acc.name }}" required>
     <label>Токен бота <span class="muted">(@BotFather){% if acc.bot_token %} — оставьте пустым, чтобы не менять{% endif %}</span></label>
     <input type="text" name="bot_token" value="" placeholder="{% if acc.bot_token %}••••••••{% else %}123456:ABC-DEF...{% endif %}">
-    <label>chat_id группы/канала <span class="muted">(@username или числовой id; бот должен быть участником)</span></label>
+    <label>chat_id канала/группы <span class="muted">(@username или числовой id; бот — админ)</span></label>
     <input type="text" name="chat_id" value="{{ acc.chat_id }}" placeholder="@mychannel или -1001234567890">
+    <label>Подпись первого комментария <span class="muted">(ссылка идёт первым комментарием; {link} — место ссылки)</span></label>
+    <input type="text" name="comment_template" value="{{ acc.comment_template }}" placeholder="Спасибо проекту {link}">
     <label>Язык публикации <span class="muted">(на нём LLM готовит подпись)</span></label>
     <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
       {% for code, lbl in languages %}

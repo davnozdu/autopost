@@ -191,6 +191,7 @@ class TGAccount(SQLModel, table=True):
     name: str
     bot_token: str = ""          # токен бота от @BotFather (хранится как github_token)
     chat_id: str = ""            # @username канала или числовой id группы (бот должен быть в ней)
+    comment_template: str = "Спасибо проекту {link}"  # первый комментарий; {link} → ссылка
     language: str = "ru"         # язык публикации: на нём LLM готовит подпись
     collect_time: str = "07:00"  # когда готовить пул постов
     post_times: str = "11:00,18:00"  # времена публикации постов (сториз в TG нет)

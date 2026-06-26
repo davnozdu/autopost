@@ -67,7 +67,43 @@ Top 10 IT News RSS Feeds (verified working — June 25, 2026)
     About:      Enterprise IT, Windows, software, hardware, security.
 
 ────────────────────────────────────────────────
+═══ BATCH 3 — Linux/OSS | Enterprise | Gadgets | Security ═══
+
+11. Phoronix
+    URL:        https://www.phoronix.com/rss.php
+    Format:     RSS 2.0
+    Status:     ✓ HTTP 200 — text/xml
+    About:      Linux, open-source, GPU/CPU drivers, benchmarks, FOSS.
+
+12. Computerworld
+    URL:        https://www.computerworld.com/feed/
+    Format:     RSS 0.92
+    Status:     ✓ HTTP 200 — application/rss+xml
+    About:      Enterprise IT, cloud, security, software, data centers.
+
+13. InfoWorld
+    URL:        https://www.infoworld.com/feed/
+    Format:     RSS 0.92
+    Status:     ✓ HTTP 200 — application/rss+xml
+    About:      Developer tools, enterprise software, cloud, AI/ML.
+
+14. Engadget
+    URL:        https://www.engadget.com/rss.xml
+    Format:     RSS 2.0
+    Status:     ✓ HTTP 200 — text/xml
+    About:      Consumer electronics, gadgets, gaming, streaming.
+
+15. BleepingComputer
+    URL:        https://www.bleepingcomputer.com/feed/
+    Format:     RSS 2.0
+    Status:     ✓ HTTP 200 — text/xml
+    About:      Cybersecurity, malware, vulnerabilities, tech news.
+
+────────────────────────────────────────────────
 All feeds tested via HTTP HEAD + GET (curl):
   ✓ Return HTTP 200
   ✓ Return valid XML with proper RSS/Atom content type
   ✓ Contain real feed items (titles, links, descriptions, dates)
+
+Note on The Register: headlines.rss (302) → api.theregister.com/… (200 XML)
+— if you prefer it, the redirect auto-resolves.

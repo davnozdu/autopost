@@ -722,6 +722,7 @@ def tg_save_account(
     name: str = Form(...),
     bot_token: str = Form(""),
     chat_id: str = Form(""),
+    comment_template: str = Form("Спасибо проекту {link}"),
     language: str = Form("ru"),
     collect_time: str = Form("07:00"),
     post_times: str = Form("11:00,18:00"),
@@ -739,6 +740,7 @@ def tg_save_account(
         if bot_token.strip():
             acc.bot_token = bot_token.strip()
         acc.chat_id = chat_id.strip()
+        acc.comment_template = comment_template.strip() or "Спасибо проекту {link}"
         acc.language = language if language in allowed_l else "ru"
         acc.collect_time = collect_time.strip() or "07:00"
         acc.post_times = ",".join(
@@ -862,6 +864,7 @@ def tg_save_post(post_id: int, caption: str = Form("")) -> RedirectResponse:
 @router.post("/tg-posts/{post_id}/publish")
 def tg_publish_post(post_id: int) -> RedirectResponse:
     from app.telegram.client import TGClient, TGError
+    from app.telegram.service import _send
 
     with Session(engine) as s:
         post = s.get(TGPost, post_id)
@@ -870,7 +873,7 @@ def tg_publish_post(post_id: int) -> RedirectResponse:
         account_id = post.account_id
         acc = s.get(TGAccount, account_id)
         try:
-            mid = TGClient(acc).send_post(post.caption, post.image_url, post.link_url or "")
+            mid = _send(TGClient(acc), acc, post)
         except TGError as exc:
             post.status = "failed"
             post.publish_note = str(exc)[:300]

@@ -23,7 +23,6 @@ from app.telegram.client import TG_CAPTION_LIMIT, TGClient, TGError
 from app.util import clean_image_url
 
 TG_MAX_HASHTAGS = 8
-LINK_RESERVE = 80         # запас под кликабельную ссылку «Подробнее: …»
 SELECT_PER_SOURCE = 5
 
 
@@ -41,9 +40,10 @@ def _compose(body: str, hashtags: list[str]) -> str:
 
 def _fit(client: LLMClient, config: AppConfig, language: str, body: str,
          hashtags: list[str]) -> str:
-    """Подпись в пределах лимита Telegram (с запасом под ссылку); иначе — саммари."""
+    """Подпись в пределах лимита Telegram; иначе — саммари. Ссылки в посте нет
+    (она идёт первым комментарием), поэтому используем весь лимит."""
     cap = _compose(body, hashtags)
-    limit = TG_CAPTION_LIMIT - LINK_RESERVE
+    limit = TG_CAPTION_LIMIT
     if len(cap) <= limit:
         return cap
     overhead = len(_compose("", hashtags))
@@ -52,6 +52,14 @@ def _fit(client: LLMClient, config: AppConfig, language: str, body: str,
     if len(cap) > limit:
         cap = cap[: limit - 1].rstrip() + "…"
     return cap
+
+
+def _send(tg: "TGClient", acc: TGAccount, post: TGPost) -> str:
+    """Опубликовать пост (без ссылки) + ссылку первым комментарием по шаблону аккаунта."""
+    comment_html = ""
+    if post.link_url:
+        comment_html = TGClient.build_comment(acc.comment_template, post.link_url)
+    return tg.send_post(post.caption or "", post.image_url, comment_html=comment_html)
 
 
 def collect_account(account_id: int) -> dict:
@@ -224,7 +232,7 @@ def run_tg_publish(account_id: int, count: int = 1) -> dict:
         errors: list[str] = []
         for post in pending[:count]:
             try:
-                mid = tg.send_post(post.caption, post.image_url, post.link_url or "")
+                mid = _send(tg, acc, post)
             except TGError as exc:
                 post.status = "failed"
                 post.publish_note = str(exc)[:300]
