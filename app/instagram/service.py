@@ -158,6 +158,7 @@ def collect_account(account_id: int) -> dict:
             return {"created": 0, "note": "пул уже заполнен"}
 
         # 1) по каждому источнику: кандидаты + LLM-выбор лучших ВНУТРИ источника
+        known_urls = set(s.exec(select(IGPost.source_url)).all())  # дедуп одним запросом
         seen: set[str] = set()
         per_source: dict[int, list[dict]] = {}
         for src in sources:
@@ -171,7 +172,7 @@ def collect_account(account_id: int) -> dict:
                 if not link or link in seen:
                     continue
                 seen.add(link)
-                if s.exec(select(IGPost).where(IGPost.source_url == link)).first():
+                if link in known_urls:
                     continue
                 if services._norm_title(e.get("title", "")) in pub_norm:
                     continue

@@ -160,6 +160,8 @@ def collect_and_generate(site_id: int) -> dict:
         client = LLMClient()
 
         # 1) кандидаты со всех лент, дедуп по ссылке
+        # известные ссылки грузим одним запросом (без N+1 по каждому кандидату)
+        known_urls = set(s.exec(select(Article.source_url)).all())
         seen: set[str] = set()
         candidates: list[dict] = []
         for src in sources:
@@ -172,7 +174,7 @@ def collect_and_generate(site_id: int) -> dict:
                 if not link or link in seen:
                     continue
                 seen.add(link)
-                if s.exec(select(Article).where(Article.source_url == link)).first():
+                if link in known_urls:
                     continue
                 candidates.append(e)
 

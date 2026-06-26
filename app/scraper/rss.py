@@ -7,9 +7,12 @@
 - в партии — по папке на новость.
 """
 
+import copy
 import json
 import re
 import shutil
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +24,10 @@ from app.scraper.extract import extract_image, extract_text, fetch_html
 SNIPPET_THRESHOLD = 800  # короче — догружаем полную статью
 MAX_ITEMS = 15           # сколько записей из ленты брать за один прогон
 KEEP_BATCHES = 10        # лимит подпапок-партий на поток
+PEEK_TTL = 300           # кэш предпросмотра ленты, сек (IG/TG/X с одним RSS не качают повторно)
+
+_peek_cache: dict[tuple[str, int], tuple[float, dict]] = {}
+_peek_lock = threading.Lock()
 
 
 def slugify(s: str, maxlen: int = 60) -> str:
@@ -47,7 +54,27 @@ def _entry_image(entry) -> str | None:
 
 
 def peek_feed(feed_url: str, limit: int = MAX_ITEMS) -> dict:
-    """Живой предпросмотр ленты без сохранения — чтобы увидеть, что поток отдаёт."""
+    """Предпросмотр ленты с кэшем на PEEK_TTL секунд (экономия сетевых загрузок).
+
+    Возвращает глубокую копию, чтобы вызывающий код мог безопасно дополнять
+    записи своими полями (_src_id и т.п.), не портя общий кэш.
+    """
+    key = (feed_url, limit)
+    now = time.monotonic()
+    with _peek_lock:
+        hit = _peek_cache.get(key)
+        if hit and now - hit[0] < PEEK_TTL:
+            return copy.deepcopy(hit[1])
+
+    result = _peek_feed_uncached(feed_url, limit)
+    # кэшируем только удачные ответы (с записями) — ошибки не «залипают»
+    if result.get("entries"):
+        with _peek_lock:
+            _peek_cache[key] = (now, result)
+    return copy.deepcopy(result)
+
+
+def _peek_feed_uncached(feed_url: str, limit: int = MAX_ITEMS) -> dict:
     parsed = feedparser.parse(feed_url)
     entries = []
     for entry in parsed.entries[:limit]:
