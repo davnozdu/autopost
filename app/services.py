@@ -285,4 +285,10 @@ def run_publish(site_id: int) -> dict:
         note = f"опубликовано {published}, удалено лишних {deleted}"
         if errors:
             note += " | ошибки: " + "; ".join(e[:80] for e in errors[:3])
+            try:
+                from app.notify import notify_error
+                notify_error(f"Сайт «{site.name}» публикация",
+                             "; ".join(e for e in errors[:3] if e))
+            except Exception:
+                pass
         return {"published": published, "deleted": deleted, "note": note}

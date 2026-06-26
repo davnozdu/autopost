@@ -33,9 +33,12 @@ async def lifespan(app: FastAPI):
     ensure_on_path()
     init_db()
     scheduler.start()
+    from app import bot
+    bot.start_worker()  # управляющий Telegram-бот (long-polling)
     try:
         yield
     finally:
+        bot.stop_worker()
         scheduler.shutdown()
 
 

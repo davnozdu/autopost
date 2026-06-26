@@ -12,9 +12,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlmodel import Session, select
 
-from app import services
+from app import notify, services
 from app.config import get_settings
-from app.db.models import IGAccount, Site, TGAccount, XAccount
+from app.db.models import AppConfig, IGAccount, Site, TGAccount, XAccount
 from app.db.session import engine
 from app.instagram import service as ig_service
 from app.telegram import service as tg_service
@@ -62,7 +62,32 @@ def reload_jobs() -> None:
         x_accounts = s.exec(
             select(XAccount).where(XAccount.enabled == True)  # noqa: E712
         ).all()
+        cfg = s.get(AppConfig, 1)
     tz = _tz()
+
+    # Ежедневная сводка в Telegram-бот мониторинга.
+    if (cfg and cfg.notify_enabled and cfg.notify_daily
+            and cfg.notify_bot_token and cfg.notify_chat_id):
+        try:
+            dh, dm = services._parse_hhmm(cfg.notify_daily_time)
+            _scheduler.add_job(
+                notify.send_daily_digest,
+                CronTrigger(hour=dh, minute=dm, timezone=tz),
+                id="notify-daily", replace_existing=True,
+            )
+        except Exception:
+            pass
+
+    # Отложенные ручные посты из управляющего бота — проверка раз в минуту.
+    try:
+        from app import bot
+        _scheduler.add_job(
+            bot.publish_due_adhoc,
+            CronTrigger(minute="*", timezone=tz),
+            id="adhoc-sweep", replace_existing=True,
+        )
+    except Exception:
+        pass
     for site in sites:
         ch, cm = services._parse_hhmm(site.collect_time)
         ph, pm = services._parse_hhmm(site.publish_time)

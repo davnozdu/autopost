@@ -227,6 +227,7 @@ def run_tg_publish(account_id: int, count: int = 1) -> dict:
         try:
             tg = TGClient(acc)
         except TGError as exc:
+            _notify(f"Telegram «{acc.name}»", str(exc))
             return {"published": 0, "note": str(exc)}
 
         published = 0
@@ -250,4 +251,14 @@ def run_tg_publish(account_id: int, count: int = 1) -> dict:
         note = f"опубликовано {published}"
         if errors:
             note += " | ошибки: " + "; ".join(e[:80] for e in errors[:2])
+            _notify(f"Telegram «{acc.name}» публикация", "; ".join(errors[:3]))
         return {"published": published, "note": note}
+
+
+def _notify(area: str, detail: str) -> None:
+    """Тихо отправить ошибку в бот мониторинга (если включён)."""
+    try:
+        from app.notify import notify_error
+        notify_error(area, detail)
+    except Exception:
+        pass

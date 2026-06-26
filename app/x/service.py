@@ -248,6 +248,7 @@ def run_x_publish(account_id: int, skippable: bool = False, count: int = 1) -> d
         try:
             xc = XClient(acc)
         except XError as exc:
+            _notify(f"X «{acc.name}»", str(exc))
             return {"published": 0, "note": str(exc)}
 
         published = 0
@@ -271,4 +272,14 @@ def run_x_publish(account_id: int, skippable: bool = False, count: int = 1) -> d
         note = f"опубликовано {published}"
         if errors:
             note += " | ошибки: " + "; ".join(e[:80] for e in errors[:2])
+            _notify(f"X «{acc.name}» публикация", "; ".join(errors[:3]))
         return {"published": published, "note": note}
+
+
+def _notify(area: str, detail: str) -> None:
+    """Тихо отправить ошибку в бот мониторинга (если включён)."""
+    try:
+        from app.notify import notify_error
+        notify_error(area, detail)
+    except Exception:
+        pass

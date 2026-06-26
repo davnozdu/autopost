@@ -32,4 +32,45 @@
   </form>
 </div>
 
+<div class="card">
+  <h2 style="margin-top:0">Бот мониторинга (Telegram)</h2>
+  <p class="muted" style="margin-top:0">
+    Бот шлёт вам в личку ошибки публикации/входа сразу и раз в день — сводку по
+    площадкам, а также принимает команды управления. Создайте <b>отдельного</b> бота
+    у @BotFather (не тот, что публикует — иначе конфликт getUpdates), напишите ему
+    любое сообщение, затем укажите токен и ваш chat_id (узнать у @userinfobot).
+  </p>
+  <p class="muted" style="margin-top:0">
+    <b>Команды в боте:</b> <code>/status</code> — состояние и очереди ·
+    <code>/stats</code> — сводка · <code>/post</code> — публикация мастером ·
+    <code>/ig /tg /x /all текст</code> — опубликовать вручную вне очереди
+    (можно с временем: <code>/tg 18:30 текст</code>, <code>/all +30m текст</code>;
+    фото — картинкой с подписью). <code>/help</code> — справка.
+  </p>
+  <form method="post" action="/settings">
+    <label><input type="checkbox" name="notify_enabled" value="true" {% if config.notify_enabled %}checked{% endif %}> Мониторинг включён</label>
+
+    <label>Токен бота <span class="muted">{% if config.notify_bot_token %}— задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="notify_bot_token" value="" placeholder="{% if config.notify_bot_token %}••••••••{% else %}123456:ABC-DEF...{% endif %}">
+
+    <label>chat_id получателя <span class="muted">(ваш личный id или @канал)</span></label>
+    <input type="text" name="notify_chat_id" value="{{ config.notify_chat_id }}" placeholder="123456789">
+
+    <label style="margin-top:12px"><input type="checkbox" name="notify_errors" value="true" {% if config.notify_errors or not config.notify_bot_token %}checked{% endif %}> Слать ошибки сразу (в реальном времени)</label>
+    <label><input type="checkbox" name="notify_daily" value="true" {% if config.notify_daily or not config.notify_bot_token %}checked{% endif %}> Ежедневная сводка</label>
+
+    <label>Время ежедневной сводки <span class="muted">(по таймзоне приложения)</span></label>
+    <input type="time" name="notify_daily_time" value="{{ config.notify_daily_time or '09:00' }}" style="width:auto">
+
+    <div style="margin-top:14px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+
+  <hr class="divider">
+  <div class="actions">
+    <form method="post" action="/settings/notify-test"><button type="submit">Отправить тест</button></form>
+    <form method="post" action="/settings/notify-digest"><button type="submit">Прислать сводку сейчас</button></form>
+  </div>
+  <p class="muted" style="margin-bottom:0">Кнопки работают по уже сохранённым настройкам.</p>
+</div>
+
 {% endblock %}

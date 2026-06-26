@@ -331,12 +331,14 @@ def run_ig_publish(account_id: int, as_kind: str, count: int = 1) -> dict:
             igc.ensure_login()
         except IGChallengeRequired as exc:
             _persist_session(s, acc, igc, "challenge", str(exc))
+            _notify(f"Instagram «{acc.name}» вход", f"нужен код подтверждения: {exc}")
             return {"published": 0, "note": f"нужен код подтверждения: {exc}"}
         except IGError as exc:
             acc.login_status = "error"
             acc.login_note = str(exc)[:300]
             s.add(acc)
             s.commit()
+            _notify(f"Instagram «{acc.name}» вход", str(exc))
             return {"published": 0, "note": str(exc)}
         _persist_session(s, acc, igc, "ok")
 
@@ -366,4 +368,15 @@ def run_ig_publish(account_id: int, as_kind: str, count: int = 1) -> dict:
         note = f"опубликовано {published} ({as_kind})"
         if errors:
             note += " | ошибки: " + "; ".join(e[:80] for e in errors[:2])
+            _notify(f"Instagram «{acc.name}» публикация ({as_kind})",
+                    "; ".join(errors[:3]))
         return {"published": published, "note": note}
+
+
+def _notify(area: str, detail: str) -> None:
+    """Тихо отправить ошибку в бот мониторинга (если включён)."""
+    try:
+        from app.notify import notify_error
+        notify_error(area, detail)
+    except Exception:
+        pass

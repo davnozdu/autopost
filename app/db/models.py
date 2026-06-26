@@ -105,6 +105,13 @@ class AppConfig(SQLModel, table=True):
     llm_model: str = ""
     password_hash: str = ""
     password_salt: str = ""
+    # Telegram-бот мониторинга: ошибки в реальном времени + ежедневная сводка.
+    notify_enabled: bool = False
+    notify_bot_token: str = ""
+    notify_chat_id: str = ""          # личный чат админа (или @канал)
+    notify_errors: bool = True        # слать ошибки публикации/входа сразу
+    notify_daily: bool = True         # ежедневная сводка по площадкам
+    notify_daily_time: str = "09:00"  # время сводки (по TZ приложения)
 
 
 class LLMCache(SQLModel, table=True):
@@ -112,6 +119,23 @@ class LLMCache(SQLModel, table=True):
 
     key: str = Field(primary_key=True)
     response: str
+    created_at: datetime = Field(default_factory=_now)
+
+
+class AdhocPost(SQLModel, table=True):
+    """Ручной пост из Telegram-бота — публикуется вне очереди (в обход робота).
+
+    platforms — какие площадки (csv: ig,tg,x). publish_at в прошлом/None → сразу;
+    в будущем → отложенно (планировщик публикует, когда наступит время).
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    platforms: str = ""              # csv: ig,tg,x
+    text: str = ""
+    image_url: str = ""              # ссылка на фото (Telegram file URL), опц.
+    publish_at: datetime | None = None
+    status: str = "pending"          # pending | published | failed
+    note: str = ""
     created_at: datetime = Field(default_factory=_now)
 
 

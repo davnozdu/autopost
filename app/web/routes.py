@@ -1174,6 +1174,12 @@ def save_settings(
     images_from_source_only: bool = Form(False),
     llm_model: str = Form(""),
     llm_instructions: str = Form(""),
+    notify_enabled: bool = Form(False),
+    notify_bot_token: str = Form(""),
+    notify_chat_id: str = Form(""),
+    notify_errors: bool = Form(False),
+    notify_daily: bool = Form(False),
+    notify_daily_time: str = Form("09:00"),
 ) -> RedirectResponse:
     with Session(engine) as s:
         config = s.get(AppConfig, 1) or AppConfig(id=1)
@@ -1182,6 +1188,31 @@ def save_settings(
         config.images_from_source_only = images_from_source_only
         config.llm_model = llm_model.strip()
         config.llm_instructions = llm_instructions
+        # Бот мониторинга: токен пустой = не менять (как с прочими секретами).
+        config.notify_enabled = notify_enabled
+        if notify_bot_token.strip():
+            config.notify_bot_token = notify_bot_token.strip()
+        config.notify_chat_id = notify_chat_id.strip()
+        config.notify_errors = notify_errors
+        config.notify_daily = notify_daily
+        config.notify_daily_time = notify_daily_time.strip() or "09:00"
         s.add(config)
         s.commit()
+    scheduler.reload_jobs()  # перерегистрировать задачу ежедневной сводки
     return _redirect("/settings", "Настройки сохранены")
+
+
+@router.post("/settings/notify-test")
+def settings_notify_test() -> RedirectResponse:
+    from app import notify
+    res = notify.send_test()
+    msg = "Тест отправлен ✓" if res.get("ok") else f"Ошибка: {res.get('note')}"
+    return _redirect("/settings", msg)
+
+
+@router.post("/settings/notify-digest")
+def settings_notify_digest() -> RedirectResponse:
+    from app import notify
+    res = notify.send_daily_digest()
+    msg = "Сводка отправлена ✓" if res.get("ok") else f"Ошибка: {res.get('note')}"
+    return _redirect("/settings", msg)
