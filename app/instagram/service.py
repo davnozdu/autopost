@@ -49,7 +49,7 @@ def _compose_caption(body: str, link: str, hashtags: list[str]) -> str:
     """Собрать подпись: текст + ссылка на сайт + хэштеги (не более лимита)."""
     parts = [body.strip()]
     if link.strip():
-        parts.append(f"Подробнее: {link.strip()}")
+        parts.append(f"Спасибо проекту {link.strip()}")
     cap = "\n\n".join(p for p in parts if p)
     tags = [t.lstrip("#") for t in hashtags if t.strip()][:IG_MAX_HASHTAGS]
     if tags:

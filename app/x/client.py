@@ -93,7 +93,7 @@ class XClient:
             main_id = await self._create(c, text)
             if link.strip() and main_id:
                 try:
-                    await self._create(c, f"Подробнее: {link.strip()}", reply_to=main_id)
+                    await self._create(c, f"Спасибо проекту {link.strip()}", reply_to=main_id)
                 except Exception:
                     pass  # основной твит уже опубликован; ответ со ссылкой не критичен
             return main_id
