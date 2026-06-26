@@ -3,13 +3,13 @@
 {% block content %}
 
 <div class="card">
-  <h3 style="margin-top:0;font-size:1rem">Версия instagrapi</h3>
-  <p style="margin:0 0 8px">
+  <h3 class="card-title">Версия instagrapi</h3>
+  <p style="margin:0 0 10px">
     Установлено: <strong>{{ ig_ver.installed or "не установлен" }}</strong>
     {% if ig_ver.latest %}
       · на PyPI: <strong>{{ ig_ver.latest }}</strong>
-      {% if ig_ver.installed == ig_ver.latest %}<span class="muted">— актуально</span>
-      {% else %}<span style="color:#b45309">— доступно обновление</span>{% endif %}
+      {% if ig_ver.installed == ig_ver.latest %}<span class="badge ok">актуально</span>
+      {% else %}<span class="badge warn">доступно обновление</span>{% endif %}
     {% endif %}
   </p>
   <div class="actions" style="flex-wrap:wrap">
@@ -30,11 +30,11 @@
 </div>
 
 <div class="card">
-  <h2 style="font-size:1.05rem;margin-top:0">Добавить аккаунт Instagram</h2>
+  <h2 style="margin-top:0">Добавить аккаунт Instagram</h2>
   <form method="post" action="/instagram">
     <label>Название (для себя)</label>
     <input type="text" name="name" required placeholder="Мой Instagram">
-    <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
+    <div style="margin-top:14px"><button class="primary" type="submit">Создать</button></div>
   </form>
   <p class="muted" style="margin-bottom:0">
     Внутри аккаунта задаются логин, расписание и RSS-источники (свои сайты и внешние).
@@ -42,11 +42,11 @@
   </p>
 </div>
 
-<h2 style="font-size:1.05rem">Аккаунты</h2>
+<h2 class="section-title">Аккаунты {% if accounts %}<span class="badge count">{{ accounts|length }}</span>{% endif %}</h2>
 {% if accounts %}
   {% for acc in accounts %}
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+    <div class="row-head">
       <strong>{{ acc.name }}{% if acc.username %} <span class="muted">@{{ acc.username }}</span>{% endif %}</strong>
       <div class="actions">
         <a href="/instagram/{{ acc.id }}"><button type="button" class="primary">Настроить</button></a>
@@ -56,15 +56,16 @@
         </form>
       </div>
     </div>
-    <p class="muted" style="margin:6px 0 0">
-      {% if acc.enabled %}активен{% else %}выключен{% endif %}
-      · пост: {{ acc.post_time }} · сториз: {{ acc.story_times }}
-      {% if acc.login_status %} · вход: {{ acc.login_status }}{% endif %}
-    </p>
+    <div class="meta">
+      {% if acc.enabled %}<span class="badge ok">автопилот</span>{% else %}<span class="badge off">выключен</span>{% endif %}
+      {% if acc.login_status %}<span class="badge {% if acc.login_status=='ok' %}ok{% elif acc.login_status=='challenge' %}warn{% else %}err{% endif %}">вход: {{ acc.login_status }}</span>{% endif %}
+      <span>пост: {{ acc.post_time }}</span>
+      <span>сториз: {{ acc.story_times }}</span>
+    </div>
   </div>
   {% endfor %}
 {% else %}
-  <p class="muted">Пока нет аккаунтов. Создайте первый.</p>
+  <div class="card muted">Пока нет аккаунтов. Создайте первый.</div>
 {% endif %}
 
 {% endblock %}

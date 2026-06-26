@@ -2,8 +2,8 @@
 {% block title %}{{ site.name }}{% endblock %}
 {% block content %}
 
-<p><a href="/">← К сайтам</a></p>
-<h2 style="font-size:1.2rem;margin-bottom:4px">{{ site.name }}</h2>
+<a class="page-back" href="/">← К сайтам</a>
+<h2 class="page-title">{{ site.name }}</h2>
 
 <div class="card">
   <div class="actions">
@@ -20,7 +20,7 @@
 </div>
 
 <div class="card">
-  <h3 style="font-size:1.05rem;margin-top:0">Настройки сайта</h3>
+  <h3 class="card-title">Настройки сайта</h3>
   <form method="post" action="/sites/{{ site.id }}">
     <label>Название</label>
     <input type="text" name="name" value="{{ site.name }}" required>
@@ -87,7 +87,7 @@
 </div>
 
 <div class="card">
-  <h3 style="font-size:1.05rem;margin-top:0">Шаблон статьи</h3>
+  <h3 class="card-title">Шаблон статьи</h3>
   <p class="muted" style="margin-top:0">
     Загрузите файл шаблона (Jinja2, .j2/.html) для этого сайта — по нему генератор
     собирает страницу статьи. {% if site.template %}<strong>Шаблон загружен ✓</strong> ({{ site.template|length }} символов).{% else %}<strong>Шаблон не загружен.</strong>{% endif %}
@@ -102,10 +102,10 @@
 </div>
 
 <div class="card">
-  <h3 style="font-size:1.05rem;margin-top:0">Источники (RSS)</h3>
+  <h3 class="card-title">Источники (RSS)</h3>
   {% if sources %}
     {% for src in sources %}
-    <div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #eee;padding:8px 0">
+    <div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--b);padding:8px 0">
       <div style="min-width:0">
         <strong>{{ src.name }}</strong>
         <div class="muted" style="word-break:break-all">{{ src.url }}</div>

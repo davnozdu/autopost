@@ -2,23 +2,23 @@
 {% block title %}Просмотр ленты{% endblock %}
 {% block content %}
 
-<p><a href="/sites/{{ src.site_id }}">← К сайту</a></p>
-<h2 style="font-size:1.15rem;margin-bottom:4px">{{ src.name }}</h2>
-<p class="muted" style="margin-top:0">{{ src.url }}</p>
+<a class="page-back" href="/sites/{{ src.site_id }}">← К сайту</a>
+<h2 class="page-title">{{ src.name }}</h2>
+<p class="muted" style="margin-top:-10px;word-break:break-all">{{ src.url }}</p>
 
 {% if data.error %}
-  <div class="card" style="border-color:#fecaca;background:#fef2f2">
-    <strong style="color:#b91c1c">Не удалось разобрать ленту.</strong>
-    <p class="muted" style="margin-bottom:0">{{ data.error }}</p>
+  <div class="banner err">
+    <div><b>Не удалось разобрать ленту.</b>
+    <div class="muted" style="margin-top:2px">{{ data.error }}</div></div>
   </div>
 {% elif data.count == 0 %}
-  <div class="card" style="border-color:#fde68a;background:#fffbeb">
-    <strong>Лента доступна, но записей не найдено.</strong>
+  <div class="banner warn">
+    <div><b>Лента доступна, но записей не найдено.</b></div>
   </div>
 {% else %}
-  <div class="card" style="border-color:#a7f3d0;background:#ecfdf5">
-    <strong style="color:#065f46">Поток подключён ✓</strong>
-    <span class="muted">— записей: {{ data.count }}{% if data.feed_title %} · «{{ data.feed_title }}»{% endif %}.</span>
+  <div class="banner ok">
+    <div><b>Поток подключён.</b>
+    <span class="muted">Записей: {{ data.count }}{% if data.feed_title %} · «{{ data.feed_title }}»{% endif %}.</span></div>
   </div>
 
   {% for e in data.entries %}
@@ -31,7 +31,7 @@
     {% if e.summary %}<p style="margin:6px 0 0">{{ e.summary }}{% if e.summary|length >= 300 %}…{% endif %}</p>{% endif %}
     <div class="actions" style="margin-top:10px">
       {% if e.processed %}
-        <span class="muted">Уже обработано ✓</span>
+        <span class="badge ok">обработано</span>
       {% else %}
         <form method="post" action="/process-one">
           <input type="hidden" name="site_id" value="{{ src.site_id }}">

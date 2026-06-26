@@ -3,20 +3,20 @@
 {% block content %}
 
 <div class="card">
-  <h2 style="font-size:1.05rem;margin-top:0">Добавить сайт</h2>
+  <h2 style="margin-top:0">Добавить сайт</h2>
   <form method="post" action="/sites">
     <label>Название сайта</label>
     <input type="text" name="name" required placeholder="stavba.example.cz">
-    <div style="margin-top:12px"><button class="primary" type="submit">Создать</button></div>
+    <div style="margin-top:14px"><button class="primary" type="submit">Создать</button></div>
   </form>
   <p class="muted" style="margin-bottom:0">Внутри сайта добавляются RSS-источники, языки перевода и расписание.</p>
 </div>
 
-<h2 style="font-size:1.05rem">Сайты</h2>
+<h2 class="section-title">Сайты {% if sites %}<span class="badge count">{{ sites|length }}</span>{% endif %}</h2>
 {% if sites %}
   {% for site in sites %}
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+    <div class="row-head">
       <strong>{{ site.name }}</strong>
       <div class="actions">
         <a href="/sites/{{ site.id }}"><button type="button" class="primary">Настроить</button></a>
@@ -26,16 +26,16 @@
         </form>
       </div>
     </div>
-    <p class="muted" style="margin:6px 0 0">
-      {% if site.enabled %}активен{% else %}выключен{% endif %}
-      · сбор: {{ site.collect_days }} {{ site.collect_time }}
-      · публикация: {{ site.publish_days }} {{ site.publish_time }}
-      {% if site.languages %} · языки: {{ site.languages.upper() }}{% endif %}
-    </p>
+    <div class="meta">
+      {% if site.enabled %}<span class="badge ok">автопилот</span>{% else %}<span class="badge off">выключен</span>{% endif %}
+      <span>сбор: {{ site.collect_days }} {{ site.collect_time }}</span>
+      <span>публикация: {{ site.publish_days }} {{ site.publish_time }}</span>
+      {% if site.languages %}<span>языки: {{ site.languages.upper() }}</span>{% endif %}
+    </div>
   </div>
   {% endfor %}
 {% else %}
-  <p class="muted">Пока нет сайтов. Создайте первый.</p>
+  <div class="card muted">Пока нет сайтов. Создайте первый.</div>
 {% endif %}
 
 {% endblock %}

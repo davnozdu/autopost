@@ -12,7 +12,7 @@
 </div>
 
 <div class="card">
-  <h2 style="font-size:1.05rem;margin-top:0">Добавить RSS-источник</h2>
+  <h2 style="margin-top:0">Добавить RSS-источник</h2>
   <form method="post" action="/feeds">
     <label>Название</label>
     <input type="text" name="name" required placeholder="estav.cz">
@@ -22,12 +22,12 @@
   </form>
 </div>
 
-<h2 style="font-size:1.05rem">Источники</h2>
+<h2 class="section-title">Источники {% if feeds %}<span class="badge count">{{ feeds|length }}</span>{% endif %}</h2>
 {% if feeds %}
   {% for f in feeds %}
   {% set flangs = f.languages.split(',') %}
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+    <div class="row-head">
       <strong>{{ f.name }}</strong>
       <div class="actions">
         <a href="/feeds/{{ f.id }}/preview"><button type="button">Просмотр</button></a>

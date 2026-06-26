@@ -2,19 +2,22 @@
 {% block title %}Превью{% endblock %}
 {% block content %}
 
-<h2 style="font-size:1.1rem">Превью по сайтам</h2>
+<h2 class="section-title">Превью по сайтам</h2>
 
 {% if groups %}
   {% for g in groups %}
   <div class="card">
-    <h3 style="margin:0 0 8px"><a href="/sites/{{ g.site.id }}">{{ g.site.name }}</a></h3>
+    <h3 style="margin:0 0 10px"><a href="/sites/{{ g.site.id }}">{{ g.site.name }}</a></h3>
     {% for status in ["draft", "scheduled", "published"] %}
       {% set items = g.sections[status] %}
-      <div style="margin:10px 0">
-        <div class="muted" style="font-weight:600">{{ labels[status] }} ({{ items|length }})</div>
+      <div style="margin:12px 0">
+        <div style="font-weight:600;font-size:.88rem;display:flex;align-items:center;gap:8px">
+          {{ labels[status] }}
+          <span class="badge {% if status=='published' %}ok{% elif status=='scheduled' %}count{% else %}off{% endif %}">{{ items|length }}</span>
+        </div>
         {% if items %}
           {% for a in items %}
-          <div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #eee;padding:6px 0">
+          <div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--b);padding:7px 0">
             <div style="min-width:0">
               <a href="/articles/{{ a.id }}">{{ a.title or "(без заголовка)" }}</a>
               {% if status == "scheduled" and a.publish_at %}

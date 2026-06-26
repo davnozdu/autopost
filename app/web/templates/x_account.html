@@ -2,19 +2,19 @@
 {% block title %}{{ acc.name }} — X{% endblock %}
 {% block content %}
 
-<p><a href="/x">← Все аккаунты</a></p>
-<h2 style="font-size:1.15rem;margin-bottom:4px">{{ acc.name }}</h2>
+<a class="page-back" href="/x">← Все аккаунты</a>
+<h2 class="page-title">{{ acc.name }}</h2>
 
 {% if acc.verify_status %}
-<div class="card" style="border-color:{% if acc.verify_status=='ok' %}#a7f3d0{% else %}#fecaca{% endif %}">
-  <strong>Проверка cookie:</strong> {{ acc.verify_status }}
-  {% if acc.verify_note %}<div class="muted" style="margin-top:4px">{{ acc.verify_note }}</div>{% endif %}
+<div class="banner {% if acc.verify_status=='ok' %}ok{% else %}err{% endif %}">
+  <div><b>Проверка cookie:</b> {{ acc.verify_status }}
+  {% if acc.verify_note %}<div class="muted" style="margin-top:2px">{{ acc.verify_note }}</div>{% endif %}</div>
 </div>
 {% endif %}
 
 <!-- Настройки аккаунта -->
 <div class="card">
-  <h3 style="margin-top:0;font-size:1rem">Cookie аккаунта (без платного API)</h3>
+  <h3 class="card-title">Cookie аккаунта (без платного API)</h3>
   <p class="muted" style="margin-top:0">Публикация идёт через внутренний веб-API X по cookie вашего аккаунта (бесплатно). Как достать: залогиньтесь в @bigtweak_cz → F12 → Application/Storage → Cookies → https://x.com → скопируйте <b>auth_token</b>, <b>ct0</b> и <b>twid</b>. Пустое поле — не менять.</p>
   <form method="post" action="/x/{{ acc.id }}">
     <label>Название</label>
@@ -26,7 +26,7 @@
     <label>twid <span class="muted">(cookie, обязателен для публикации; вид u%3D123…)</span></label>
     <input type="text" name="twid" value="" placeholder="{% if acc.twid %}••••••••{% else %}u%3D...{% endif %}">
     <label>Язык публикации <span class="muted">(на нём LLM готовит твит)</span></label>
-    <select name="language" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--b)">
+    <select name="language">
       {% for code, lbl in languages %}
       <option value="{{ code }}" {% if acc.language == code %}selected{% endif %}>{{ lbl }}</option>
       {% endfor %}
@@ -62,7 +62,7 @@
 
 <!-- Действия -->
 <div class="card">
-  <h3 style="margin-top:0;font-size:1rem">Действия</h3>
+  <h3 class="card-title">Действия</h3>
   <div class="actions" style="flex-wrap:wrap">
     <form method="post" action="/x/{{ acc.id }}/verify">
       <button class="primary" type="submit">Проверить cookie</button>
@@ -83,7 +83,7 @@
 
 <!-- Источники -->
 <div class="card">
-  <h3 style="margin-top:0;font-size:1rem">RSS-источники</h3>
+  <h3 class="card-title">RSS-источники</h3>
   <p class="muted" style="margin-top:0">Каждый материал прогоняется через LLM (короткий твит + хэштеги). Источники чередуются по кругу; ссылка на сайт источника добавляется в твит.</p>
   <form method="post" action="/x/{{ acc.id }}/sources">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
@@ -133,18 +133,18 @@
 </div>
 
 <!-- Пул материалов -->
-<h3 style="font-size:1rem">Пул материалов</h3>
+<h3 class="section-title">Пул материалов</h3>
 {% for status, label in [('scheduled','В пуле'), ('failed','Ошибки'), ('published','Опубликовано')] %}
   {% set items = sections[status] %}
   {% if items %}
-  <h4 style="margin:14px 0 6px">{{ label }} ({{ items|length }})</h4>
+  <h4 style="margin:18px 0 8px;display:flex;align-items:center;gap:8px">{{ label }} <span class="badge {% if status=='failed' %}err{% elif status=='published' %}ok{% else %}count{% endif %}">{{ items|length }}</span></h4>
     {% for p in items %}
     <div class="card">
       <div style="display:flex;gap:12px">
         {% if p.image_url %}<img class="thumb" src="{{ p.image_url }}" alt="" style="max-width:120px">{% endif %}
         <div style="flex:1">
           <strong>{{ p.source_title or '(без названия)' }}</strong>
-          {% if p.link_url %}<div class="muted" style="margin-top:2px">🔗 {{ p.link_url }}</div>{% endif %}
+          {% if p.link_url %}<div class="muted" style="margin-top:2px;word-break:break-all">{{ p.link_url }}</div>{% endif %}
           {% if p.publish_note %}<div class="muted" style="margin-top:2px">{{ p.publish_note }}</div>{% endif %}
         </div>
       </div>
