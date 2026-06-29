@@ -243,7 +243,7 @@ def run_publish(site_id: int) -> dict:
     (сверх нужного количества) удаляем. Те из N, что не опубликовались (ошибка),
     остаются с пометкой — чтобы видеть причину и повторить.
     """
-    from app.publisher import publish
+    from app.publisher import publish_many
 
     with Session(engine) as s:
         site = s.get(Site, site_id)
@@ -263,8 +263,9 @@ def run_publish(site_id: int) -> dict:
         now = _now()
         published = 0
         errors = []
-        for art in to_publish:
-            result = publish(art)
+        # ВСЕ статьи прогона публикуются ОДНИМ push (один запуск деплоя сайта)
+        results = publish_many(to_publish)
+        for art, result in zip(to_publish, results):
             art.publish_note = result.get("note", "")
             if result.get("published"):
                 art.status = "published"
