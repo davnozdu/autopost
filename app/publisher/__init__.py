@@ -89,7 +89,7 @@ def render_article(article: Article) -> dict:
         try:
             html, meta, path_base = render_page(
                 site, lang=seg, slug=article.slug, content=content,
-                image_url=article.image_url, publish_at=article.publish_at,
+                image_url=article.image_url, publish_at=None,  # дата = момент публикации
                 alternates=targets,
             )
             files.append((f"{path_base}/index.html", html.encode("utf-8")))

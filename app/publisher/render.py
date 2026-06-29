@@ -5,9 +5,11 @@ render_page рендерит конкретную языковую версию 
 
 import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, select_autoescape
 
+from app.config import get_settings
 from app.db.models import Site
 
 _MONTHS = {
@@ -47,10 +49,17 @@ def render_page(
     publish_at: datetime | None,
     alternates: list[str],
 ) -> tuple[str, dict, str]:
-    """Вернуть (html, meta_dict, path_base) для языковой версии статьи."""
-    when = publish_at or datetime.now(timezone.utc)
+    """Вернуть (html, meta_dict, path_base) для языковой версии статьи.
+
+    Дата карточки — момент ФАКТИЧЕСКОЙ публикации (сейчас) в таймзоне сайта,
+    а не дата выхода новости и не запланированный слот. publish_at=None →
+    берётся текущее время (так и вызывается из паблишера при публикации).
+    """
+    tz = ZoneInfo(get_settings().tz)
+    when = publish_at or datetime.now(tz)
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
+    when = when.astimezone(tz)  # дата в таймзоне сайта (локальное «сегодня»)
     date_iso = when.date().isoformat()
     date_human = _date_human(when, lang)
     url = f"/{lang}/blog/{slug}/"
