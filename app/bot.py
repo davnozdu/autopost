@@ -345,7 +345,7 @@ def _publish_tg(text: str, image_url: str | None) -> list[str]:
         accs = s.exec(select(TGAccount).where(TGAccount.enabled == True)).all()  # noqa: E712
     for acc in accs:
         # бэклинк-указатель в первый комментарий: случайная ссылка из RSS-источников
-        link = _random_tg_link(acc.id)
+        link = _random_source_link("tg", acc.id)
         comment = TGClient.build_comment(acc.comment_template, link) if link else ""
         try:
             TGClient(acc).send_post(_fit(text or "", _FIT["tg"]), image_url,
@@ -356,13 +356,20 @@ def _publish_tg(text: str, image_url: str | None) -> list[str]:
     return out
 
 
-def _random_tg_link(account_id: int) -> str:
-    """Случайная «Ссылка на сайт» из включённых RSS-источников аккаунта (бэклинк)."""
-    from app.db.models import TGSource
+def _random_source_link(plat: str, account_id: int) -> str:
+    """Случайная «Ссылка на сайт» из включённых RSS-источников аккаунта (бэклинк).
+
+    Едино для всех площадок: сайт берётся из настроек RSS и различается
+    (если источников несколько — выбор случайный, как в Telegram).
+    """
+    from app.db.models import IGSource, TGSource, XSource
+    model = {"ig": IGSource, "tg": TGSource, "x": XSource}.get(plat)
+    if not model:
+        return ""
     with Session(engine) as s:
         srcs = s.exec(
-            select(TGSource).where(
-                TGSource.account_id == account_id, TGSource.enabled == True)  # noqa: E712
+            select(model).where(
+                model.account_id == account_id, model.enabled == True)  # noqa: E712
         ).all()
     links = [(sr.link_url or "").strip() for sr in srcs if (sr.link_url or "").strip()]
     return random.choice(links) if links else ""
@@ -374,8 +381,9 @@ def _publish_x(text: str) -> list[str]:
     with Session(engine) as s:
         accs = s.exec(select(XAccount).where(XAccount.enabled == True)).all()  # noqa: E712
     for acc in accs:
+        link = _random_source_link("x", acc.id)  # бэклинк из RSS → ответом под твитом
         try:
-            XClient(acc).post(_fit(text or "", _FIT["x"]), link="")
+            XClient(acc).post(_fit(text or "", _FIT["x"]), link=link)
             out.append(f"• X «{acc.name}»: опубликовано")
         except XError as exc:
             out.append(f"• X «{acc.name}»: ошибка — {exc}")
@@ -393,6 +401,10 @@ def _publish_ig(text: str, image_url: str | None) -> list[str]:
     tmp = Path(get_settings().data_dir) / "bot"
     tmp.mkdir(parents=True, exist_ok=True)
     for acc in accs:
+        link = _random_source_link("ig", acc.id)  # бэклинк из RSS → в подпись
+        body = text or ""
+        if link:
+            body = (body.rstrip() + f"\n\nСпасибо проекту {link}").strip()
         try:
             igc = IGClient(acc)
             igc.ensure_login()
@@ -400,7 +412,7 @@ def _publish_ig(text: str, image_url: str | None) -> list[str]:
             if not img:
                 out.append(f"• Instagram «{acc.name}»: битая картинка")
                 continue
-            igc.upload_photo(img, _fit(text or "", _FIT["ig"]))
+            igc.upload_photo(img, _fit(body, _FIT["ig"]))
             out.append(f"• Instagram «{acc.name}»: опубликовано")
         except IGError as exc:
             out.append(f"• Instagram «{acc.name}»: ошибка — {exc}")
@@ -758,10 +770,14 @@ def _enqueue_native(platforms: list[str], text: str, image_url: str) -> str:
             if not acc:
                 out.append(f"• {_PLATFORMS[plat]}: нет включённого аккаунта")
                 continue
-            # для Telegram кладём случайный бэклинк — робот вставит его в комментарий
-            link_url = _random_tg_link(acc.id) if plat == "tg" else ""
+            # бэклинк из RSS-источников. TG: робот вставит в комментарий по link_url;
+            # X: ответом по link_url; IG (фид): впишем прямо в подпись.
+            link_url = _random_source_link(plat, acc.id)
+            caption = text or ""
+            if plat == "ig" and link_url:
+                caption = (caption.rstrip() + f"\n\nСпасибо проекту {link_url}").strip()
             s.add(model(account_id=acc.id, source_title="ручной пост",
-                        caption=_fit(text, _FIT[plat]), image_url=image_url or None,
+                        caption=_fit(caption, _FIT[plat]), image_url=image_url or None,
                         link_url=link_url, status="scheduled"))
             out.append(f"• {_PLATFORMS[plat]} «{acc.name}»: добавлено в пул")
         s.commit()

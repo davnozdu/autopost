@@ -277,17 +277,20 @@ def login_account(account_id: int, verification_code: str = "") -> dict:
 
 
 def _story_overlay(post: IGPost) -> str:
-    """Текст для наложения на сториз: пара предложений из подписи (БЕЗ хэштегов)."""
+    """Короткий текст для плашки сториз: 1–2 коротких предложения (БЕЗ хэштегов)."""
     cap = post.caption or ""
     body = re.sub(r"#\w+", "", cap)  # убрать хэштеги из тела
     body = re.sub(r"\s+", " ", body).strip()
     title = body or post.source_title or ""
-    text = ""
+    text, count = "", 0
     for sn in re.split(r"(?<=[.!?])\s+", title):
-        if text and len(text) + len(sn) > 180:
+        if count >= 2 or (text and len(text) + len(sn) > 140):
             break
         text = (text + " " + sn).strip()
-    return text[:200]
+        count += 1
+    if not text:
+        text = title[:140]
+    return text[:160]
 
 
 def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str:
@@ -295,7 +298,7 @@ def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str
     if as_kind == "story":
         img = ig_media.prepare(
             post.image_url, _media_dir() / f"{post.id}-story.jpg", "story",
-            overlay_title=_story_overlay(post),
+            overlay_title=_story_overlay(post), overlay_link=post.link_url or "",
         )
         if not img:
             raise IGError("нет/битая картинка")

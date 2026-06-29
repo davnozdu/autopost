@@ -11,10 +11,41 @@ from app.db.models import AppConfig
 
 ALLOWED_TAGS = "p, h2, h3, ul, ol, li, strong, em, a"
 
+# Названия языков для жёсткой инструкции (код → как назвать модели).
+LANG_NAMES = {
+    "ru": "ruštině (русский язык)",
+    "cs": "češtině",
+    "sk": "slovenčině",
+    "en": "angličtině (English)",
+    "uk": "ukrajinštině (українська мова)",
+    "de": "němčině",
+    "pl": "polštině",
+    "es": "španělštině",
+    "fr": "francouzštině",
+}
+
+
+def _lang_name(code: str) -> str:
+    return LANG_NAMES.get((code or "").strip().lower()[:2], code or "ruštině")
+
+
+def _lang_rule(code: str) -> str:
+    """Жёсткое правило языка вывода (чтобы не проскакивала латиница/английский)."""
+    name = _lang_name(code)
+    return (
+        f"KRITICKY DŮLEŽITÉ: celý výstup piš VÝHRADNĚ v jazyce {name}. "
+        f"Nepoužívej žádný jiný jazyk — ani angličtinu, ani češtinu (pokud to není "
+        f"cílový jazyk). Vše, včetně názvů a hashtagů, musí být v jazyce {name}."
+    )
+
+
+def _lang_reminder(code: str) -> str:
+    return f"\n\nDŮLEŽITÉ: odpověz výhradně v jazyce {_lang_name(code)}."
+
 
 def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
     rules = [
-        f"Piš výhradně v jazyce: {config.language}.",
+        _lang_rule(config.language),
         f"Délka článku přibližně {config.chars_per_news} znaků.",
     ]
     if config.images_from_source_only:
@@ -45,6 +76,7 @@ def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
         f"URL zdroje: {news.get('link', '')}\n"
         f"Obrázek ze zdroje: {news.get('image') or ''}\n\n"
         f"Text zdroje:\n{news.get('text', '')}"
+        + _lang_reminder(config.language)
     )
     return system, user
 
@@ -117,7 +149,7 @@ def build_ig_prompt(config: AppConfig, news: dict, language: str | None = None) 
     """
     lang = (language or config.language or "ru").strip()
     rules = [
-        f"Piš výhradně v jazyce: {lang}.",
+        _lang_rule(lang),
         "Formát: poutavý popisek pro Instagram, 2–4 krátké odstavce, "
         "lehké a lidské podání, klidně 1–3 vhodné emoji (ne přehnaně).",
         "Bez klišé a marketingového balastu; první věta musí zaujmout.",
@@ -135,6 +167,7 @@ def build_ig_prompt(config: AppConfig, news: dict, language: str | None = None) 
     user = (
         f"Titulek zdroje: {news.get('title', '')}\n\n"
         f"Text zdroje:\n{news.get('text', '')}"
+        + _lang_reminder(lang)
     )
     return system, user
 
@@ -147,7 +180,7 @@ def build_tg_prompt(config: AppConfig, news: dict, language: str | None = None) 
     """
     lang = (language or config.language or "ru").strip()
     rules = [
-        f"Piš výhradně v jazyce: {lang}.",
+        _lang_rule(lang),
         "Formát: poutavý příspěvek pro Telegram, 2–5 krátkých odstavců, lidský tón, "
         "klidně 1–2 emoji. První věta musí zaujmout.",
         "Bez klišé. NEzmiňuj zdroj a nevkládej do textu žádné odkazy.",
@@ -164,6 +197,7 @@ def build_tg_prompt(config: AppConfig, news: dict, language: str | None = None) 
     user = (
         f"Titulek zdroje: {news.get('title', '')}\n\n"
         f"Text zdroje:\n{news.get('text', '')}"
+        + _lang_reminder(lang)
     )
     return system, user
 
@@ -176,7 +210,7 @@ def build_x_prompt(config: AppConfig, news: dict, language: str | None = None) -
     """
     lang = (language or config.language or "ru").strip()
     rules = [
-        f"Piš výhradně v jazyce: {lang}.",
+        _lang_rule(lang),
         "Formát: JEDEN tweet pro X (Twitter). Text MAX 200 znaků (zbytek místa je "
         "na odkaz a hashtagy). Úderné, lidské, klidně 1 emoji.",
         "Bez klišé. NEzmiňuj zdroj a nevkládej do textu žádné odkazy.",
@@ -193,6 +227,7 @@ def build_x_prompt(config: AppConfig, news: dict, language: str | None = None) -
     user = (
         f"Titulek zdroje: {news.get('title', '')}\n\n"
         f"Text zdroje:\n{news.get('text', '')}"
+        + _lang_reminder(lang)
     )
     return system, user
 
@@ -217,10 +252,10 @@ def build_shorten_prompt(text: str, max_chars: int, language: str) -> tuple[str,
     """Промпт сокращения текста подписи под лимит символов (без JSON)."""
     system = (
         f"Zkrať následující text do max {max_chars} znaků. Zachovej smysl, hlavní "
-        f"fakta a přirozený, lidský tón. Piš ve stejném jazyce ({language}). "
+        f"fakta a přirozený, lidský tón. {_lang_rule(language)} "
         f"Vrať POUZE zkrácený text, bez uvozovek a komentářů."
     )
-    return system, text
+    return system, text + _lang_reminder(language)
 
 
 def build_translate_prompt(content: dict, target_name: str) -> tuple[str, str]:

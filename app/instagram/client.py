@@ -88,14 +88,23 @@ class IGClient:
         return str(getattr(media, "pk", "") or "")
 
     def _pick_track(self):
-        """Любой трек из библиотеки Instagram (лицензированный) — для сториз."""
-        for q in ("trending", "pop", "vibe", "hits", "music"):
+        """Случайный трек из библиотеки Instagram (лицензированный) — для сториз.
+
+        Рандомизируем и порядок запросов, и выбор трека из выдачи, чтобы музыка
+        не повторялась от сторис к сторис.
+        """
+        import random
+
+        queries = ["trending", "pop", "vibe", "hits", "music",
+                   "chill", "summer", "beats", "mood", "energy"]
+        random.shuffle(queries)
+        for q in queries:
             try:
                 tracks = self.cl.search_music(q)
             except Exception:
                 tracks = None
             if tracks:
-                return tracks[0]
+                return random.choice(tracks[:15])
         return None
 
     def upload_story(self, path: Path, caption: str = "", link: str = "",
@@ -110,7 +119,13 @@ class IGClient:
             try:
                 from instagrapi.types import StoryLink
 
-                links = [StoryLink(webUri=link.strip())]
+                # позиционируем кликабельный стикер над нарисованной «пилюлей»
+                # (низ белой плашки), чтобы тап по названию сайта открывал ссылку
+                try:
+                    links = [StoryLink(webUri=link.strip(),
+                                       x=0.32, y=0.95, width=0.55, height=0.06)]
+                except Exception:
+                    links = [StoryLink(webUri=link.strip())]
             except Exception:
                 links = []
         self.music_note = ""
