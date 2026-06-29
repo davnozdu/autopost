@@ -87,6 +87,9 @@ def render_page(
         "url": url,
         "date": date_iso,
         "date_human": date_human,
+        # полная метка времени публикации (UTC) — ключ сортировки списка:
+        # новые статьи первыми, в т.ч. несколько за один день
+        "published_at": when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "tag": content.get("tag", ""),
         "annotation": annotation,
         "image": image_url or "",
