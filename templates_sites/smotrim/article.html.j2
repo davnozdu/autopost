@@ -83,7 +83,10 @@
         <a class="btn btn--ghost btn--sm" href="tel:+420608210867">+420 608 210 867</a>
         <a class="btn btn--online btn--sm" href="https://login.smotrim.cz" target="_blank" rel="noopener">{{ n.online }}</a>
         <a href="/{{ lang }}/#price" class="btn btn--primary btn--sm">{{ n.connect }}</a>
-        <div class="lang-switch">{% for l in langs %}<a href="/{{ l }}/blog/{{ slug }}/" class="lang-btn{% if l == lang %} lang-btn--active{% endif %}">{{ 'UA' if l == 'uk' else l | upper }}</a>{% endfor %}</div>
+        <div class="lang-dd">
+          <button type="button" class="lang-dd-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="Сменить язык">{{ 'UA' if lang == 'uk' else 'RU' }} <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="lang-dd-menu" role="listbox">{% for l in langs %}<a href="/{{ l }}/blog/{{ slug }}/"{% if l == lang %} class="is-active"{% endif %}>{{ 'UA · Українська' if l == 'uk' else 'RU · Русский' }}</a>{% endfor %}</div>
+        </div>
         <button id="menu-toggle" class="menu-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
       </div>
     </div>
@@ -128,6 +131,6 @@
       </div>
     </div>
   </footer>
-  <script>document.addEventListener('DOMContentLoaded',function(){var t=document.getElementById('menu-toggle'),m=document.getElementById('nav-menu');if(t&&m)t.addEventListener('click',function(){m.classList.toggle('nav--open');});});</script>
+  <script>document.addEventListener('DOMContentLoaded',function(){var t=document.getElementById('menu-toggle'),m=document.getElementById('nav-menu');if(t&&m)t.addEventListener('click',function(){m.classList.toggle('nav--open');});var dd=document.querySelector('.lang-dd');if(dd){var g=dd.querySelector('.lang-dd-toggle');g.addEventListener('click',function(e){e.stopPropagation();var o=dd.classList.toggle('is-open');g.setAttribute('aria-expanded',o);});document.addEventListener('click',function(e){if(!dd.contains(e.target)){dd.classList.remove('is-open');g.setAttribute('aria-expanded','false');}});}});</script>
 </body>
 </html>
