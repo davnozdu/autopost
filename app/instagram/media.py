@@ -159,6 +159,25 @@ def _draw_story_panel(img, text: str, link: str = "", accent=None) -> None:
         draw.text((x0 + px, y0 + py), dom, font=lf, fill=(255, 255, 255, 255))
 
 
+def _paste_rounded(bg, fg, x: int, y: int, radius: int) -> None:
+    """Вставить фото со скруглёнными углами и мягкой тенью — выглядит «карточкой»."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    w, h = fg.size
+    # маска скругления
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w, h], radius=radius, fill=255)
+    # мягкая тень под фото
+    pad = 28
+    shadow = Image.new("RGBA", (w + pad * 2, h + pad * 2), (0, 0, 0, 0))
+    sdraw = ImageDraw.Draw(shadow)
+    sdraw.rounded_rectangle([pad, pad, pad + w, pad + h], radius=radius,
+                            fill=(0, 0, 0, 110))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(18))
+    bg.paste(shadow, (x - pad, y - pad + 8), shadow)
+    bg.paste(fg, (x, y), mask)
+
+
 def prepare(url: str | None, out_path: Path, kind: str,
             overlay_title: str = "", overlay_link: str = "") -> Path | None:
     """Скачать `url`, привести к формату и (для сториз) наложить плашку. → JPEG или None."""
@@ -183,11 +202,18 @@ def prepare(url: str | None, out_path: Path, kind: str,
     bg = ImageOps.fit(src, (tw, th), Image.LANCZOS).filter(ImageFilter.GaussianBlur(40))
 
     if kind == "story":
-        # фото — в верхние 70%, чтобы белая плашка снизу его не перекрывала
+        # фото — в верхние 70%, чтобы белая плашка снизу его не перекрывала.
+        # оставляем поля, скругляем углы и кладём тень → аккуратная «карточка».
         area_h = th - int(th * PANEL_RATIO)
+        side_margin = int(tw * 0.06)
         fg = src.copy()
-        fg.thumbnail((tw, area_h), Image.LANCZOS)
-        bg.paste(fg, ((tw - fg.width) // 2, (area_h - fg.height) // 2))
+        fg.thumbnail((tw - 2 * side_margin, area_h - int(th * 0.05)), Image.LANCZOS)
+        px = (tw - fg.width) // 2
+        py = max(int(th * 0.04), (area_h - fg.height) // 2)
+        try:
+            _paste_rounded(bg, fg, px, py, radius=int(tw * 0.05))
+        except Exception:
+            bg.paste(fg, (px, py))
         if overlay_title:
             try:
                 _draw_story_panel(bg, overlay_title, overlay_link)

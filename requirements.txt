@@ -13,7 +13,7 @@ trafilatura==1.12.2
 APScheduler==3.11.0
 tzdata==2024.2
 # Instagram-публикация (соцсети). instagrapi тянет requests/pydantic/pycryptodomex.
-instagrapi==2.16.25
+instagrapi==2.16.26
 Pillow>=12.2.0,<13
 # X (Twitter) — публикация через twikit (внутренний веб-API по cookie, без платного API X).
 twikit==2.3.3

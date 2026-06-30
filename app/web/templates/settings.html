@@ -5,6 +5,7 @@
 <div class="card">
   <h2 style="margin-top:0">Инструкции для LLM</h2>
   <form method="post" action="/settings">
+    <input type="hidden" name="section" value="general">
     <label>Язык статьи</label>
     <input type="text" name="language" value="{{ config.language }}">
 
@@ -28,6 +29,9 @@
     <label>Дополнительные инструкции</label>
     <textarea name="llm_instructions">{{ config.llm_instructions }}</textarea>
 
+    <label style="margin-top:14px">Ключ Giphy API <span class="muted">— для анимированных GIF-стикеров по теме на сториз (бесплатный на developers.giphy.com){% if config.giphy_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="giphy_api_key" value="" placeholder="{% if config.giphy_api_key %}••••••••{% else %}dc6zaTOxFJmzC{% endif %}">
+
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
 </div>
@@ -48,6 +52,7 @@
     фото — картинкой с подписью). <code>/help</code> — справка.
   </p>
   <form method="post" action="/settings">
+    <input type="hidden" name="section" value="notify">
     <label><input type="checkbox" name="notify_enabled" value="true" {% if config.notify_enabled %}checked{% endif %}> Мониторинг включён</label>
 
     <label>Токен бота <span class="muted">{% if config.notify_bot_token %}— задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>

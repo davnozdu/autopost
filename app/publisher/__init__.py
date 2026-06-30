@@ -63,7 +63,7 @@ def render_article(article: Article) -> dict:
     # переводы для не-основных языков — параллельно (это самая долгая часть)
     def _translate(seg: str):
         try:
-            system, user = build_translate_prompt(base_content, lang_name(seg))
+            system, user = build_translate_prompt(base_content, lang_name(seg), seg)
             res = client.chat(system, user, json_mode=True, temperature=0.3,
                               model=(config.llm_model or None))
             return seg, parse_translation(res.text, base_content), None

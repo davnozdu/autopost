@@ -470,6 +470,7 @@ def ig_save_account(
     story_times: str = Form("13:00,17:00,21:00"),
     collect_limit: int = Form(8),
     story_music: bool = Form(False),
+    story_gif: bool = Form(False),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
     allowed_l = {c for c, _ in LANGUAGES}
@@ -478,6 +479,7 @@ def ig_save_account(
         if not acc:
             return _redirect("/instagram", "Аккаунт не найден")
         acc.story_music = story_music
+        acc.story_gif = story_gif
         acc.name = name.strip()
         acc.username = username.strip()
         if password.strip():
@@ -1169,6 +1171,7 @@ def settings_page(request: Request, msg: str = "") -> HTMLResponse:
 
 @router.post("/settings")
 def save_settings(
+    section: str = Form("general"),
     language: str = Form("cs"),
     chars_per_news: int = Form(1500),
     images_from_source_only: bool = Form(False),
@@ -1180,22 +1183,31 @@ def save_settings(
     notify_errors: bool = Form(False),
     notify_daily: bool = Form(False),
     notify_daily_time: str = Form("09:00"),
+    giphy_api_key: str = Form(""),
 ) -> RedirectResponse:
+    # На странице две независимые формы (общие настройки и бот мониторинга), обе
+    # постят сюда. Обновляем ТОЛЬКО поля присланной секции, чтобы сохранение одной
+    # формы не затирало настройки другой (у непосланных чекбоксов значение False).
     with Session(engine) as s:
         config = s.get(AppConfig, 1) or AppConfig(id=1)
-        config.language = language.strip() or "cs"
-        config.chars_per_news = chars_per_news
-        config.images_from_source_only = images_from_source_only
-        config.llm_model = llm_model.strip()
-        config.llm_instructions = llm_instructions
-        # Бот мониторинга: токен пустой = не менять (как с прочими секретами).
-        config.notify_enabled = notify_enabled
-        if notify_bot_token.strip():
-            config.notify_bot_token = notify_bot_token.strip()
-        config.notify_chat_id = notify_chat_id.strip()
-        config.notify_errors = notify_errors
-        config.notify_daily = notify_daily
-        config.notify_daily_time = notify_daily_time.strip() or "09:00"
+        if section == "notify":
+            config.notify_enabled = notify_enabled
+            # токен пустой = не менять (как с прочими секретами)
+            if notify_bot_token.strip():
+                config.notify_bot_token = notify_bot_token.strip()
+            config.notify_chat_id = notify_chat_id.strip()
+            config.notify_errors = notify_errors
+            config.notify_daily = notify_daily
+            config.notify_daily_time = notify_daily_time.strip() or "09:00"
+        else:  # general
+            config.language = language.strip() or "cs"
+            config.chars_per_news = chars_per_news
+            config.images_from_source_only = images_from_source_only
+            config.llm_model = llm_model.strip()
+            config.llm_instructions = llm_instructions
+            # ключ Giphy пустой = не менять (секрет)
+            if giphy_api_key.strip():
+                config.giphy_api_key = giphy_api_key.strip()
         s.add(config)
         s.commit()
     scheduler.reload_jobs()  # перерегистрировать задачу ежедневной сводки

@@ -18,11 +18,31 @@ engine = create_engine(
 
 
 def _column_default_sql(column) -> str:
-    """Безопасный DEFAULT для ALTER TABLE ADD COLUMN на существующих строках."""
+    """Безопасный DEFAULT для ALTER TABLE ADD COLUMN на существующих строках.
+
+    По возможности используем дефолт из модели (чтобы, например, bool со
+    значением True у существующих строк стал 1, а не 0)."""
     try:
         pytype = column.type.python_type
     except (NotImplementedError, AttributeError):
         pytype = str
+    # дефолт, заданный в модели (SQLModel/SQLAlchemy ColumnDefault со скаляром)
+    model_default = getattr(getattr(column, "default", None), "arg", None)
+    if model_default is not None and not callable(model_default):
+        if pytype is bool:
+            return "1" if model_default else "0"
+        if pytype is int:
+            try:
+                return str(int(model_default))
+            except (TypeError, ValueError):
+                return "0"
+        if pytype is float:
+            try:
+                return str(float(model_default))
+            except (TypeError, ValueError):
+                return "0"
+        if pytype is str:
+            return "'" + str(model_default).replace("'", "''") + "'"
     if pytype is str:
         return "''"
     if pytype is bool or pytype is int:

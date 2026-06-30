@@ -293,6 +293,21 @@ def _story_overlay(post: IGPost) -> str:
     return text[:160]
 
 
+def _story_gif_ids(acc: IGAccount, post: IGPost) -> list[str]:
+    """Найти id анимированных GIF-стикеров Giphy «по теме» (если включено и есть ключ)."""
+    if not getattr(acc, "story_gif", False):
+        return []
+    with Session(engine) as s:
+        config = s.get(AppConfig, 1) or AppConfig(id=1)
+    api_key = getattr(config, "giphy_api_key", "") or ""
+    if not api_key.strip():
+        return []
+    from app.instagram import giphy
+    hashtags = re.findall(r"#(\w+)", post.caption or "")
+    query = giphy.build_query(hashtags, post.source_title or "")
+    return giphy.search_sticker_ids(api_key, query, lang=acc.language or "en")
+
+
 def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str:
     """Подготовить медиа и опубликовать (пост или сториз с текстом+музыкой). → pk."""
     if as_kind == "story":
@@ -303,7 +318,8 @@ def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str
         if not img:
             raise IGError("нет/битая картинка")
         return igc.upload_story(img, caption=post.source_title or "",
-                                link=post.link_url or "", with_music=acc.story_music)
+                                link=post.link_url or "", with_music=acc.story_music,
+                                gif_ids=_story_gif_ids(acc, post))
     img = ig_media.prepare(post.image_url, _media_dir() / f"{post.id}-post.jpg", "post")
     if not img:
         raise IGError("нет/битая картинка")

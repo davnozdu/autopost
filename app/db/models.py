@@ -112,6 +112,8 @@ class AppConfig(SQLModel, table=True):
     notify_errors: bool = True        # слать ошибки публикации/входа сразу
     notify_daily: bool = True         # ежедневная сводка по площадкам
     notify_daily_time: str = "09:00"  # время сводки (по TZ приложения)
+    # Giphy: анимированные стикеры по теме на сториз (бесплатный ключ api.giphy.com).
+    giphy_api_key: str = ""
 
 
 class LLMCache(SQLModel, table=True):
@@ -162,6 +164,7 @@ class IGAccount(SQLModel, table=True):
     collect_limit: int = 8       # сколько материалов готовить за один сбор (пул)
     last_source_id: int = 0      # курсор ротации источников (для равномерного чередования)
     story_music: bool = True     # добавлять музыку из библиотеки Instagram к сториз
+    story_gif: bool = True       # добавлять анимированный GIF-стикер по теме (Giphy)
     enabled: bool = True
     # Состояние входа (для админки): "", ok, challenge, error
     login_status: str = ""

@@ -25,8 +25,33 @@ LANG_NAMES = {
 }
 
 
+# Инструкция на САМОМ целевом языке — самый надёжный «замок» против дрейфа
+# модели в чешский/английский (язык системного промпта). Дублируем её в начале
+# (system) и в конце (user), чтобы язык вывода был зафиксирован с двух сторон.
+LANG_NATIVE = {
+    "ru": "Пиши весь ответ строго на русском языке. Не используй другие языки.",
+    "cs": "Celou odpověď piš výhradně v češtině. Nepoužívej jiný jazyk.",
+    "sk": "Celú odpoveď píš výhradne v slovenčine. Nepoužívaj iný jazyk.",
+    "en": "Write the entire response strictly in English. Do not use any other language.",
+    "uk": "Пиши всю відповідь виключно українською мовою. Не використовуй інші мови.",
+    "de": "Schreibe die gesamte Antwort ausschließlich auf Deutsch. Verwende keine andere Sprache.",
+    "pl": "Całą odpowiedź pisz wyłącznie po polsku. Nie używaj innego języka.",
+    "es": "Escribe toda la respuesta únicamente en español. No uses ningún otro idioma.",
+    "fr": "Écris toute la réponse uniquement en français. N'utilise aucune autre langue.",
+}
+
+
+def _lang_code(code: str) -> str:
+    return (code or "").strip().lower()[:2]
+
+
 def _lang_name(code: str) -> str:
-    return LANG_NAMES.get((code or "").strip().lower()[:2], code or "ruštině")
+    return LANG_NAMES.get(_lang_code(code), code or "ruštině")
+
+
+def _lang_native(code: str) -> str:
+    """Императив «пиши только на этом языке» — на самом целевом языке."""
+    return LANG_NATIVE.get(_lang_code(code), LANG_NATIVE["ru"])
 
 
 def _lang_rule(code: str) -> str:
@@ -35,12 +60,15 @@ def _lang_rule(code: str) -> str:
     return (
         f"KRITICKY DŮLEŽITÉ: celý výstup piš VÝHRADNĚ v jazyce {name}. "
         f"Nepoužívej žádný jiný jazyk — ani angličtinu, ani češtinu (pokud to není "
-        f"cílový jazyk). Vše, včetně názvů a hashtagů, musí být v jazyce {name}."
+        f"cílový jazyk). Vše, včetně názvů a hashtagů, musí být v jazyce {name}. "
+        # та же инструкция на самом целевом языке — сильнее всего фиксирует язык
+        f"{_lang_native(code)}"
     )
 
 
 def _lang_reminder(code: str) -> str:
-    return f"\n\nDŮLEŽITÉ: odpověz výhradně v jazyce {_lang_name(code)}."
+    # напоминание в конце user-сообщения — на целевом языке (последнее, что видит модель)
+    return f"\n\n{_lang_native(code)}"
 
 
 def build_prompt(config: AppConfig, news: dict) -> tuple[str, str]:
@@ -258,13 +286,17 @@ def build_shorten_prompt(text: str, max_chars: int, language: str) -> tuple[str,
     return system, text + _lang_reminder(language)
 
 
-def build_translate_prompt(content: dict, target_name: str) -> tuple[str, str]:
+def build_translate_prompt(content: dict, target_name: str,
+                           lang_code: str = "") -> tuple[str, str]:
     """Промпт перевода статьи в целевой язык с сохранением HTML-структуры."""
+    native = _lang_native(lang_code) if lang_code else ""
     system = (
         f"You are a professional translator and SEO editor. Translate the article into "
         f"{target_name}. Keep it natural and idiomatic (not literal), preserve meaning, "
         f"facts and tone. In body_html translate ONLY the text and keep the HTML structure "
         f"and tags ({ALLOWED_TAGS}) intact. Do not mention or add any source. "
+        f"CRITICAL: every output field must be ENTIRELY in {target_name}; do not leave "
+        f"any sentence in the original language. {native} "
         'Return ONLY valid JSON: {"title":"...","annotation":"...","meta_description":"...",'
         '"tag":"...","keywords":["...","..."],"body_html":"..."}.'
     )
