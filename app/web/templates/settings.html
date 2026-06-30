@@ -81,4 +81,46 @@
   <p class="muted" style="margin-bottom:0">Кнопки работают по уже сохранённым настройкам.</p>
 </div>
 
+<div class="card">
+  <h2 style="margin-top:0">Резервный LLM (если основной недоступен)</h2>
+  <p class="muted" style="margin-top:0">
+    Если основной провайдер (DeepSeek) перестаёт отвечать, обработка временно
+    переключается на резервный канал — по умолчанию <b>OpenAI/ChatGPT по API</b>.
+    Это именно <b>резерв с авто-восстановлением</b>: при сбое запросы на {{ (fallback.seconds_left // 60) if fallback else 5 }}≈5 минут идут в резерв, затем основной пробуется снова и, как только отвечает, всё возвращается на него. Без ключа резерва поведение прежнее.
+  </p>
+  {% if fallback and fallback.primary_down %}
+  <div class="banner warn">
+    <div><b>Сейчас активен резерв.</b> Основной «{{ fallback.provider }}» в кулдауне ещё ~{{ fallback.seconds_left }} c.
+    {% if fallback.note %}<div class="muted" style="margin-top:2px">{{ fallback.note }}</div>{% endif %}</div>
+  </div>
+  {% endif %}
+  <form method="post" action="/settings">
+    <input type="hidden" name="section" value="llm_fallback">
+    <label><input type="checkbox" name="llm_fallback_enabled" value="true" {% if config.llm_fallback_enabled %}checked{% endif %}> Резервный канал включён</label>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">
+        <label>Провайдер</label>
+        <select name="llm_fallback_provider">
+          {% for p in ["openai", "deepseek", "claude", "hermes", "local"] %}
+          <option value="{{ p }}" {% if config.llm_fallback_provider == p %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="flex:2;min-width:200px">
+        <label>Модель <span class="muted">(пусто — дефолт провайдера, для openai: gpt-4o-mini)</span></label>
+        <input type="text" name="llm_fallback_model" value="{{ config.llm_fallback_model }}" placeholder="gpt-4o-mini">
+      </div>
+    </div>
+
+    <label>base_url <span class="muted">(пусто — стандартный для провайдера; для OpenAI https://api.openai.com/v1)</span></label>
+    <input type="text" name="llm_fallback_base_url" value="{{ config.llm_fallback_base_url }}" placeholder="https://api.openai.com/v1">
+
+    <label>API-ключ резерва <span class="muted">{% if config.llm_fallback_key %}— задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="llm_fallback_key" value="" placeholder="{% if config.llm_fallback_key %}••••••••{% else %}sk-...{% endif %}">
+
+    <div style="margin-top:14px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
 {% endblock %}

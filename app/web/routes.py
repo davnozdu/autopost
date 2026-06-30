@@ -1328,10 +1328,14 @@ def digest_delete_source(source_id: int) -> RedirectResponse:
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, msg: str = "") -> HTMLResponse:
+    from app.llm.client import failover_status
+
     with Session(engine) as s:
         config = s.get(AppConfig, 1) or AppConfig(id=1)
     return templates.TemplateResponse(
-        request, "settings.html", {"config": config, "msg": msg, "models": DEEPSEEK_MODELS}
+        request, "settings.html",
+        {"config": config, "msg": msg, "models": DEEPSEEK_MODELS,
+         "fallback": failover_status()},
     )
 
 
@@ -1351,6 +1355,11 @@ def save_settings(
     notify_daily_time: str = Form("09:00"),
     giphy_api_key: str = Form(""),
     brave_api_key: str = Form(""),
+    llm_fallback_enabled: bool = Form(False),
+    llm_fallback_provider: str = Form("openai"),
+    llm_fallback_base_url: str = Form(""),
+    llm_fallback_key: str = Form(""),
+    llm_fallback_model: str = Form(""),
 ) -> RedirectResponse:
     # На странице две независимые формы (общие настройки и бот мониторинга), обе
     # постят сюда. Обновляем ТОЛЬКО поля присланной секции, чтобы сохранение одной
@@ -1366,6 +1375,14 @@ def save_settings(
             config.notify_errors = notify_errors
             config.notify_daily = notify_daily
             config.notify_daily_time = notify_daily_time.strip() or "09:00"
+        elif section == "llm_fallback":
+            config.llm_fallback_enabled = llm_fallback_enabled
+            config.llm_fallback_provider = (llm_fallback_provider.strip() or "openai").lower()
+            config.llm_fallback_base_url = llm_fallback_base_url.strip()
+            config.llm_fallback_model = llm_fallback_model.strip()
+            # ключ резерва пустой = не менять (секрет)
+            if llm_fallback_key.strip():
+                config.llm_fallback_key = llm_fallback_key.strip()
         else:  # general
             config.language = language.strip() or "cs"
             config.chars_per_news = chars_per_news

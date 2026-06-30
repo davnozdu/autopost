@@ -117,6 +117,14 @@ class AppConfig(SQLModel, table=True):
     # Brave Search API: ранжирование новостей дайджеста по актуальности (бесплатный
     # ключ на api.search.brave.com). LLM при этом не тратится — ранжирует Brave.
     brave_api_key: str = ""
+    # Резервный LLM-канал: если основной провайдер (DeepSeek) недоступен — временно
+    # переключаемся на этот (по умолч. OpenAI/ChatGPT по API). С авто-восстановлением:
+    # по истечении кулдауна снова пробуется основной (см. app/llm/client.py).
+    llm_fallback_enabled: bool = False
+    llm_fallback_provider: str = "openai"   # пресет из app/llm/providers.py
+    llm_fallback_base_url: str = ""          # пусто → base_url пресета
+    llm_fallback_key: str = ""               # ключ резервного провайдера (секрет)
+    llm_fallback_model: str = ""             # пусто → default_model пресета
 
 
 class LLMCache(SQLModel, table=True):
