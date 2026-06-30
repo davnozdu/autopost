@@ -9,8 +9,8 @@
 {%- set share = domain ~ ("/assets/og-cover-uk.jpg" if lang == "uk" else "/assets/og-cover.jpg") -%}
 {%- set og_image = image_url or share -%}
 {%- set nav = {
-  "ru": {"channels": "Каналы", "how": "Подключение", "price": "Тарифы", "faq": "Вопросы", "blog": "Блог", "connect": "Подключить", "back": "Все новости", "skip": "Перейти к содержимому", "home": "На главную", "title": "Новости", "tagline": "Интернет-ТВ на родном языке. Для всей семьи.", "rights": "Все права защищены."},
-  "uk": {"channels": "Канали", "how": "Підключення", "price": "Тарифи", "faq": "Питання", "blog": "Блог", "connect": "Підключити", "back": "Усі новини", "skip": "Перейти до вмісту", "home": "На головну", "title": "Новини", "tagline": "Інтернет-ТБ рідною мовою. Для всієї родини.", "rights": "Усі права захищені."}
+  "ru": {"channels": "Каналы", "how": "Подключение", "price": "Тарифы", "faq": "Вопросы", "blog": "Блог", "connect": "Подключить", "online": "Смотреть ОнЛайн", "back": "Все новости", "skip": "Перейти к содержимому", "home": "На главную", "title": "Новости", "tagline": "Интернет-ТВ на родном языке. Для всей семьи.", "rights": "Все права защищены."},
+  "uk": {"channels": "Канали", "how": "Підключення", "price": "Тарифи", "faq": "Питання", "blog": "Блог", "connect": "Підключити", "online": "Дивитися ОнЛайн", "back": "Усі новини", "skip": "Перейти до вмісту", "home": "На головну", "title": "Новини", "tagline": "Інтернет-ТБ рідною мовою. Для всієї родини.", "rights": "Усі права захищені."}
 } -%}
 {%- set n = nav.get(lang, nav["ru"]) -%}
 {%- set langs = ["ru", "uk"] -%}
@@ -80,9 +80,10 @@
         <a href="/{{ lang }}/blog/" class="is-active">{{ n.blog }}</a>
       </nav>
       <div class="hdr-actions">
-        <div class="lang-switch">{% for l in langs %}<a href="/{{ l }}/blog/{{ slug }}/" class="lang-btn{% if l == lang %} lang-btn--active{% endif %}">{{ 'UA' if l == 'uk' else l | upper }}</a>{% endfor %}</div>
-        <a class="hdr-phone" href="tel:+420608210867">+420 608 210 867</a>
+        <a class="btn btn--ghost btn--sm" href="tel:+420608210867">+420 608 210 867</a>
+        <a class="btn btn--online btn--sm" href="https://login.smotrim.cz" target="_blank" rel="noopener">{{ n.online }}</a>
         <a href="/{{ lang }}/#price" class="btn btn--primary btn--sm">{{ n.connect }}</a>
+        <div class="lang-switch">{% for l in langs %}<a href="/{{ l }}/blog/{{ slug }}/" class="lang-btn{% if l == lang %} lang-btn--active{% endif %}">{{ 'UA' if l == 'uk' else l | upper }}</a>{% endfor %}</div>
         <button id="menu-toggle" class="menu-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
       </div>
     </div>
