@@ -122,6 +122,28 @@
     /* чекбоксы выровнены с подписью */
     label > input[type=checkbox] { width: auto; min-height: 0; margin-right: 8px; vertical-align: -1px; accent-color: var(--accent); }
     input[type=checkbox] { accent-color: var(--accent); }
+    /* поля времени — единообразно компактные */
+    input[type=time] { width: auto; max-width: 170px; }
+
+    /* ---- Виджет набора времён (мультивремя через запятую) ---- */
+    .timeset { margin: 5px 0 2px; }
+    .timeset-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .timeset-row input[type=time] { margin: 0; }
+    .timeset-add { min-height: 42px; }
+    .timeset-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 6px 5px 12px; border-radius: 999px;
+      background: var(--accent-soft); border: 1px solid #d6e4ff; color: var(--accent);
+      font-family: var(--f-mono); font-size: .84rem; font-weight: 600; line-height: 1;
+    }
+    .chip button {
+      all: unset; cursor: pointer; width: 19px; height: 19px; min-height: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 50%; color: var(--accent); font-size: 1rem; transition: background .12s;
+    }
+    .chip button:hover { background: rgba(37,99,235,.16); }
+    .timeset-empty { color: var(--muted); font-size: .85rem; margin-top: 8px; }
 
     /* ---- Кнопки ---- */
     button, .btn {
@@ -235,6 +257,55 @@
         var on = href === '/' ? p === '/' : (p === href || p.indexOf(href + '/') === 0);
         if (on) a.classList.add('active');
       });
+    })();
+
+    // Виджет набора времён: выбрал время → плашка. Сабмитит скрытое поле
+    // <name> со значениями через запятую (формат бэкенда не меняется).
+    (function () {
+      function init(el) {
+        var name = el.dataset.name;
+        var times = (el.dataset.value || '').split(',')
+          .map(function (s) { return s.trim(); }).filter(Boolean);
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden'; hidden.name = name;
+        var row = document.createElement('div'); row.className = 'timeset-row';
+        var pick = document.createElement('input'); pick.type = 'time';
+        var add = document.createElement('button');
+        add.type = 'button'; add.className = 'timeset-add'; add.textContent = 'Добавить';
+        var chips = document.createElement('div'); chips.className = 'timeset-chips';
+        row.appendChild(pick); row.appendChild(add);
+        el.appendChild(hidden); el.appendChild(row); el.appendChild(chips);
+
+        function render() {
+          times = Array.from(new Set(times)).sort();
+          hidden.value = times.join(',');
+          chips.innerHTML = '';
+          if (!times.length) {
+            var em = document.createElement('div');
+            em.className = 'timeset-empty';
+            em.textContent = 'Пока не задано — выберите время и нажмите «Добавить».';
+            chips.appendChild(em); return;
+          }
+          times.forEach(function (t) {
+            var c = document.createElement('span'); c.className = 'chip'; c.textContent = t;
+            var b = document.createElement('button');
+            b.type = 'button'; b.setAttribute('aria-label', 'Удалить ' + t); b.innerHTML = '&times;';
+            b.onclick = function () { times = times.filter(function (x) { return x !== t; }); render(); };
+            c.appendChild(b); chips.appendChild(c);
+          });
+        }
+        function addTime() {
+          var v = pick.value;
+          if (v && times.indexOf(v) === -1) times.push(v);
+          pick.value = ''; render();
+        }
+        add.onclick = addTime;
+        pick.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); addTime(); }
+        });
+        render();
+      }
+      document.querySelectorAll('.timeset').forEach(init);
     })();
   </script>
 </body>

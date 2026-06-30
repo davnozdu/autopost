@@ -34,19 +34,19 @@
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:120px">
         <label>Время сбора</label>
-        <input type="text" name="collect_time" value="{{ acc.collect_time }}" placeholder="07:00">
+        <input type="time" name="collect_time" value="{{ acc.collect_time }}">
       </div>
       <div style="flex:1;min-width:120px">
         <label>Время поста</label>
-        <input type="text" name="post_time" value="{{ acc.post_time }}" placeholder="11:00">
+        <input type="time" name="post_time" value="{{ acc.post_time }}">
       </div>
       <div style="flex:1;min-width:120px">
         <label>Размер пула</label>
         <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
       </div>
     </div>
-    <label>Времена сториз <span class="muted">(через запятую, 2–3 в день)</span></label>
-    <input type="text" name="story_times" value="{{ acc.story_times }}" placeholder="13:00,17:00,21:00">
+    <label>Времена сториз <span class="muted">(2–3 в день)</span></label>
+    <div class="timeset" data-name="story_times" data-value="{{ acc.story_times }}"></div>
 
     <label style="margin-top:12px"><input type="checkbox" name="story_music" {% if acc.story_music %}checked{% endif %}> Добавлять музыку из библиотеки Instagram к сториз</label>
     <label><input type="checkbox" name="story_gif" {% if acc.story_gif %}checked{% endif %}> Добавлять анимированный GIF-стикер по теме к сториз (нужен ключ Giphy в Настройках)</label>

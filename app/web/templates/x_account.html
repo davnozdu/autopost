@@ -35,15 +35,15 @@
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:120px">
         <label>Время сбора</label>
-        <input type="text" name="collect_time" value="{{ acc.collect_time }}" placeholder="07:00">
+        <input type="time" name="collect_time" value="{{ acc.collect_time }}">
       </div>
       <div style="flex:1;min-width:120px">
         <label>Размер пула</label>
         <input type="number" name="collect_limit" value="{{ acc.collect_limit }}" min="1">
       </div>
     </div>
-    <label>Времена твитов <span class="muted">(через запятую; 2-й и далее слот публикуется через раз → 1–2/день)</span></label>
-    <input type="text" name="post_times" value="{{ acc.post_times }}" placeholder="11:00,18:00">
+    <label>Времена твитов <span class="muted">(2-й и далее слот публикуется через раз → 1–2/день)</span></label>
+    <div class="timeset" data-name="post_times" data-value="{{ acc.post_times }}"></div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
       <div style="min-width:150px">
         <label>Сдвиг времени ±мин</label>
