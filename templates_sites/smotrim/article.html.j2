@@ -1,0 +1,132 @@
+{# Шаблон статьи smotrim.cz (Jinja2). Загружается в админку сайта.
+   Генератор передаёт: lang, slug, title, meta_description, keywords, tag,
+   image_url, body_html, date_iso, date_human, annotation, alternates.
+   Сайт — React-in-browser, но страницы блога server-rendered и самодостаточны:
+   тянут /assets/blog.css. Листинг/пагинацию/RSS/sitemap строит PHP на сервере. #}
+{%- set domain = "https://smotrim.cz" -%}
+{%- set url = "/" ~ lang ~ "/blog/" ~ slug ~ "/" -%}
+{%- set canonical = domain ~ url -%}
+{%- set share = domain ~ ("/assets/og-cover-uk.jpg" if lang == "uk" else "/assets/og-cover.jpg") -%}
+{%- set og_image = image_url or share -%}
+{%- set nav = {
+  "ru": {"channels": "Каналы", "how": "Подключение", "price": "Тарифы", "faq": "Вопросы", "blog": "Блог", "connect": "Подключить", "back": "Все новости", "skip": "Перейти к содержимому", "home": "На главную", "title": "Новости", "tagline": "Интернет-ТВ на родном языке. Для всей семьи.", "rights": "Все права защищены."},
+  "uk": {"channels": "Канали", "how": "Підключення", "price": "Тарифи", "faq": "Питання", "blog": "Блог", "connect": "Підключити", "back": "Усі новини", "skip": "Перейти до вмісту", "home": "На головну", "title": "Новини", "tagline": "Інтернет-ТБ рідною мовою. Для всієї родини.", "rights": "Усі права захищені."}
+} -%}
+{%- set n = nav.get(lang, nav["ru"]) -%}
+{%- set langs = ["ru", "uk"] -%}
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>{{ title }} — smotrim</title>
+  <meta name="description" content="{{ meta_description }}" />
+  <meta name="keywords" content="{{ keywords }}" />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />
+  <meta name="author" content="Big Tweak s.r.o." />
+  <meta name="theme-color" content="#1f4d3a" />
+
+  <link rel="canonical" href="{{ canonical }}" />
+  {% for alt in alternates %}<link rel="alternate" hreflang="{{ alt }}" href="{{ domain }}/{{ alt }}/blog/{{ slug }}/" />
+  {% endfor %}{% if alternates %}<link rel="alternate" hreflang="x-default" href="{{ domain }}/{{ 'ru' if 'ru' in alternates else alternates[0] }}/blog/{{ slug }}/" />{% endif %}
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="smotrim" />
+  <meta property="og:title" content="{{ title }}" />
+  <meta property="og:description" content="{{ meta_description }}" />
+  <meta property="og:url" content="{{ canonical }}" />
+  <meta property="og:image" content="{{ og_image }}" />
+  <meta property="article:published_time" content="{{ date_iso }}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ title }}" />
+  <meta name="twitter:description" content="{{ meta_description }}" />
+  <meta name="twitter:image" content="{{ og_image }}" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    "headline": {{ title | tojson }},
+    {% if image_url %}"image": [{{ image_url | tojson }}],{% endif %}
+    "datePublished": "{{ date_iso }}",
+    "dateModified": "{{ date_iso }}",
+    "author": { "@type": "Organization", "name": "Big Tweak s.r.o." },
+    "publisher": {
+      "@type": "Organization",
+      "name": "smotrim — Big Tweak s.r.o.",
+      "logo": { "@type": "ImageObject", "url": "{{ domain }}/assets/logo.png" }
+    },
+    "mainEntityOfPage": "{{ canonical }}"
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/blog.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">{{ n.skip }}</a>
+  <header class="hdr">
+    <div class="hdr-inner">
+      <a class="brand" href="/{{ lang }}/" aria-label="smotrim"><span class="brand-mark"><img src="/assets/logo.png" alt="smotrim"></span><span class="brand-name">smotrim</span></a>
+      <nav id="nav-menu" class="nav" aria-label="primary">
+        <a href="/{{ lang }}/#channels">{{ n.channels }}</a>
+        <a href="/{{ lang }}/#how">{{ n.how }}</a>
+        <a href="/{{ lang }}/#price">{{ n.price }}</a>
+        <a href="/{{ lang }}/#faq">{{ n.faq }}</a>
+        <a href="/{{ lang }}/blog/" class="is-active">{{ n.blog }}</a>
+      </nav>
+      <div class="hdr-actions">
+        <div class="lang-switch">{% for l in langs %}<a href="/{{ l }}/blog/{{ slug }}/" class="lang-btn{% if l == lang %} lang-btn--active{% endif %}">{{ 'UA' if l == 'uk' else l | upper }}</a>{% endfor %}</div>
+        <a class="hdr-phone" href="tel:+420608210867">+420 608 210 867</a>
+        <a href="/{{ lang }}/#price" class="btn btn--primary btn--sm">{{ n.connect }}</a>
+        <button id="menu-toggle" class="menu-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="article-wrap">
+    <div class="container">
+      <article class="article">
+        <a class="article__back" href="/{{ lang }}/blog/">← {{ n.back }}</a>
+        <h1 class="article__title">{{ title }}</h1>
+        <div class="article__meta"><span>{{ date_human }}</span>{% if tag %}<span class="news-card__tag">{{ tag }}</span>{% endif %}</div>
+        {% if image_url %}<img class="article__cover" src="{{ image_url }}" alt="{{ title }}" />{% endif %}
+
+        <div class="article__body">{{ body_html | safe }}</div>
+
+        {# Бэклинк на сайт (в теле → уходит при репосте). Текст по языку. #}
+        <div class="article__backlink">
+          {% if lang == 'uk' %}Матеріал підготувала команда <a href="{{ domain }}/uk/">smotrim — інтернет-ТБ рідною мовою в Празі</a>: понад 4000 каналів, фільми, спорт, серіали. Телефонуйте: <a href="tel:+420608210867">+420&nbsp;608&nbsp;210&nbsp;867</a>.
+          {% else %}Материал подготовила команда <a href="{{ domain }}/ru/">smotrim — интернет-ТВ на родном языке в Праге</a>: более 4000 каналов, фильмы, спорт, сериалы. Звоните: <a href="tel:+420608210867">+420&nbsp;608&nbsp;210&nbsp;867</a>.
+          {% endif %}
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <footer class="ftr">
+    <div class="ftr-inner">
+      <div class="ftr-brand">
+        <div class="brand"><span class="brand-mark"><img src="/assets/logo.png" alt="smotrim"></span><span class="brand-name">smotrim</span></div>
+        <p class="ftr-tag">{{ n.tagline }}</p>
+      </div>
+      <div class="ftr-cols">
+        <div class="ftr-col"><div class="ftr-ttl">Telefon</div><a href="tel:+420608210867">+420 608 210 867</a></div>
+        <div class="ftr-col"><div class="ftr-ttl">E-mail</div><a href="mailto:info@smotrim.cz">info@smotrim.cz</a></div>
+        <div class="ftr-col"><div class="ftr-ttl">{{ n.blog }}</div><a href="/{{ lang }}/blog/">{{ n.title }}</a></div>
+        <div class="ftr-col"><div class="ftr-ttl">{{ n.home }}</div><a href="/{{ lang }}/">smotrim.cz</a></div>
+        <div class="ftr-col"><div class="ftr-ttl">Language</div><div class="lang-switch">{% for l in langs %}<a href="/{{ l }}/blog/{{ slug }}/" class="lang-btn{% if l == lang %} lang-btn--active{% endif %}">{{ 'UA' if l == 'uk' else l | upper }}</a>{% endfor %}</div></div>
+      </div>
+      <div class="ftr-bot">
+        <span>© {{ date_iso[:4] }} Big Tweak s.r.o. · smotrim. {{ n.rights }}</span>
+        <span>Senovážné nám. 978/23, Praha 1</span>
+      </div>
+    </div>
+  </footer>
+  <script>document.addEventListener('DOMContentLoaded',function(){var t=document.getElementById('menu-toggle'),m=document.getElementById('nav-menu');if(t&&m)t.addEventListener('click',function(){m.classList.toggle('nav--open');});});</script>
+</body>
+</html>
