@@ -28,6 +28,7 @@ class IGClient:
             raise IGError(f"instagrapi не установлен: {exc}")
         self.account = account
         self.music_note = ""  # причина, по которой музыка не добавилась (для диагностики)
+        self.gif_note = ""    # судьба GIF-стикера: добавлен / не принят / нет id (диагностика)
         self.cl = Client()
         self.cl.delay_range = [1, 3]  # человеческие задержки между запросами
         if account.session_json:
@@ -162,6 +163,14 @@ class IGClient:
         links = self._story_links(link)
         stickers = self._story_gif_stickers(gif_ids)
         self.music_note = ""
+        # Диагностика GIF: почему стикер не виден. Различаем «не нашли id» (нет
+        # ключа Giphy / пустая тема) и «id есть, но стикер не построился».
+        if not gif_ids:
+            self.gif_note = "GIF: стикеров не нашлось (проверьте ключ Giphy и тумблер GIF)"
+        elif not stickers:
+            self.gif_note = "GIF: id есть, но стикер не построен (instagrapi.types)"
+        else:
+            self.gif_note = ""
 
         # планы: (режим, доп. стикеры?) — сверху самый «нарядный»
         plans: list[tuple[str, bool]] = []
@@ -174,6 +183,7 @@ class IGClient:
             plans.append(("plain", False))  # последний оплот: только ссылка
 
         last_exc: Exception | None = None
+        sticker_exc: Exception | None = None
         for mode, use_stickers in plans:
             kw = {"links": links}
             if use_stickers:
@@ -191,9 +201,20 @@ class IGClient:
                     story = self.cl.photo_upload_to_story(
                         Path(path), caption=caption, **kw
                     )
+                # успех: зафиксировать судьбу GIF-стикера для админки
+                if stickers:
+                    if use_stickers:
+                        self.gif_note = "GIF-стикер добавлен ✓"
+                    else:
+                        self.gif_note = "GIF не принят Instagram — опубликовано без него" + (
+                            f": {type(sticker_exc).__name__}: {str(sticker_exc)[:120]}"
+                            if sticker_exc else ""
+                        )
                 return str(getattr(story, "pk", "") or "")
             except Exception as exc:
                 last_exc = exc
+                if use_stickers:
+                    sticker_exc = exc  # запомнить именно ошибку варианта со стикером
                 if mode == "music":
                     self.music_note = (
                         f"музыка не удалась: {type(exc).__name__}: {str(exc)[:140]}"

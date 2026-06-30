@@ -379,6 +379,8 @@ def run_ig_publish(account_id: int, as_kind: str, count: int = 1) -> dict:
             post.publish_note = "опубликовано"
             if as_kind == "story" and igc.music_note:
                 post.publish_note += " | " + igc.music_note
+            if as_kind == "story" and getattr(igc, "gif_note", ""):
+                post.publish_note += " | " + igc.gif_note
             s.add(post)
             published += 1
         s.commit()
@@ -433,6 +435,8 @@ def publish_post(post_id: int, as_kind: str = "post") -> tuple[bool, str]:
         post.publish_note = "опубликовано из бота"
         if kind == "story" and getattr(igc, "music_note", ""):
             post.publish_note += " | " + igc.music_note
+        if kind == "story" and getattr(igc, "gif_note", ""):
+            post.publish_note += " | " + igc.gif_note
         s.add(post)
         _persist_session(s, acc, igc, "ok")
         return True, f"Instagram «{acc.name}»: опубликовано ({kind})"
