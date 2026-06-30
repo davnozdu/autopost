@@ -30,7 +30,7 @@
   <link rel="canonical" href="{{ canonical }}" />
   {% for alt in alternates %}<link rel="alternate" hreflang="{{ alt }}" href="{{ domain }}/{{ alt }}/blog/{{ slug }}/" />
   {% endfor %}{% if alternates %}<link rel="alternate" hreflang="x-default" href="{{ domain }}/{{ 'ru' if 'ru' in alternates else alternates[0] }}/blog/{{ slug }}/" />{% endif %}
-  <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <link rel="icon" type="image/png" href="/assets/smotrimlogo.png" />
 
   <meta property="og:type" content="article" />
   <meta property="og:site_name" content="smotrim" />
@@ -56,7 +56,7 @@
     "publisher": {
       "@type": "Organization",
       "name": "smotrim — Big Tweak s.r.o.",
-      "logo": { "@type": "ImageObject", "url": "{{ domain }}/assets/logo.png" }
+      "logo": { "@type": "ImageObject", "url": "{{ domain }}/assets/smotrimlogo.png" }
     },
     "mainEntityOfPage": "{{ canonical }}"
   }
@@ -71,7 +71,7 @@
   <a class="skip-link" href="#main">{{ n.skip }}</a>
   <header class="hdr">
     <div class="hdr-inner">
-      <a class="brand" href="/{{ lang }}/" aria-label="smotrim"><span class="brand-mark"><img src="/assets/logo.png" alt="smotrim"></span><span class="brand-name">smotrim</span></a>
+      <a class="brand" href="/{{ lang }}/" aria-label="smotrim"><span class="brand-mark"><img src="/assets/smotrimlogo.png" alt="smotrim"></span><span class="brand-name">smotrim</span></a>
       <nav id="nav-menu" class="nav" aria-label="primary">
         <a href="/{{ lang }}/#channels">{{ n.channels }}</a>
         <a href="/{{ lang }}/#how">{{ n.how }}</a>
@@ -111,7 +111,7 @@
   <footer class="ftr">
     <div class="ftr-inner">
       <div class="ftr-brand">
-        <div class="brand"><span class="brand-mark"><img src="/assets/logo.png" alt="smotrim"></span><span class="brand-name">smotrim</span></div>
+        <div class="brand"><span class="brand-mark"><img src="/assets/smotrimlogo.png" alt="smotrim"></span><span class="brand-name">smotrim</span></div>
         <p class="ftr-tag">{{ n.tagline }}</p>
       </div>
       <div class="ftr-cols">
