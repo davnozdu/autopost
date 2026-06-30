@@ -13,10 +13,13 @@ from starlette.requests import Request
 from app import scheduler, services
 from app.config import get_settings
 from app.db.models import (
+    BRAVE_FRESHNESS,
     LANGUAGES,
     WEEKDAYS,
     AppConfig,
     Article,
+    Digest,
+    DigestSource,
     IGAccount,
     IGPost,
     IGSource,
@@ -1160,6 +1163,169 @@ def x_delete_post(post_id: int) -> RedirectResponse:
 
 
 # ── Глобальные настройки LLM ──────────────────────────────────────────
+# ── Дайджесты (соцсети) ───────────────────────────────────────────────
+def _digest_accounts() -> dict:
+    """Списки соц-аккаунтов для выбора цели дайджеста."""
+    with Session(engine) as s:
+        return {
+            "ig": s.exec(select(IGAccount).order_by(IGAccount.name)).all(),
+            "tg": s.exec(select(TGAccount).order_by(TGAccount.name)).all(),
+            "x": s.exec(select(XAccount).order_by(XAccount.name)).all(),
+        }
+
+
+@router.get("/digests", response_class=HTMLResponse)
+def digests_page(request: Request, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        digests = s.exec(select(Digest).order_by(Digest.created_at.desc())).all()
+        config = s.get(AppConfig, 1) or AppConfig(id=1)
+    accs = _digest_accounts()
+    has_accounts = any(accs.values())
+    return templates.TemplateResponse(
+        request, "digests.html",
+        {"digests": digests, "msg": msg, "has_accounts": has_accounts,
+         "brave_set": bool(config.brave_api_key)},
+    )
+
+
+@router.post("/digests")
+def add_digest(name: str = Form(...)) -> RedirectResponse:
+    with Session(engine) as s:
+        dg = Digest(name=name.strip() or "Дайджест")
+        s.add(dg)
+        s.commit()
+        s.refresh(dg)
+        new_id = dg.id
+    scheduler.reload_jobs()
+    return _redirect(f"/digests/{new_id}", "Дайджест создан — настройте источники и время")
+
+
+@router.get("/digests/{digest_id}", response_class=HTMLResponse)
+def digest_page(request: Request, digest_id: int, msg: str = "") -> HTMLResponse:
+    with Session(engine) as s:
+        dg = s.get(Digest, digest_id)
+        if not dg:
+            return _redirect("/digests", "Дайджест не найден")
+        sources = s.exec(
+            select(DigestSource).where(DigestSource.digest_id == digest_id)
+            .order_by(DigestSource.id)
+        ).all()
+        config = s.get(AppConfig, 1) or AppConfig(id=1)
+    runs = [j for j in scheduler.jobs_info() if j["id"] == f"digest-{digest_id}"]
+    return templates.TemplateResponse(
+        request, "digest.html",
+        {"dg": dg, "sources": sources, "accounts": _digest_accounts(),
+         "languages": LANGUAGES, "freshness": BRAVE_FRESHNESS, "runs": runs,
+         "brave_set": bool(config.brave_api_key), "msg": msg},
+    )
+
+
+@router.post("/digests/{digest_id}")
+def save_digest(
+    digest_id: int,
+    name: str = Form(...),
+    target: str = Form(""),            # "ig:5" | "tg:2" | "x:1"
+    language: str = Form(""),
+    publish_time: str = Form("18:00"),
+    instructions: str = Form(""),
+    brave_query: str = Form(""),
+    brave_freshness: str = Form("pd"),
+    use_brave: bool = Form(False),
+    collect_limit: int = Form(12),
+    jitter_min: int = Form(0),
+    enabled: bool = Form(False),
+) -> RedirectResponse:
+    allowed_l = {c for c, _ in LANGUAGES}
+    allowed_f = {c for c, _ in BRAVE_FRESHNESS}
+    with Session(engine) as s:
+        dg = s.get(Digest, digest_id)
+        if not dg:
+            return _redirect("/digests", "Дайджест не найден")
+        dg.name = name.strip() or "Дайджест"
+        if ":" in target:
+            plat, _, aid = target.partition(":")
+            if plat in ("ig", "tg", "x") and aid.isdigit():
+                dg.platform = plat
+                dg.account_id = int(aid)
+        dg.language = language if language in allowed_l else ""
+        dg.publish_time = publish_time.strip() or "18:00"
+        dg.instructions = instructions
+        dg.brave_query = brave_query.strip()
+        dg.brave_freshness = brave_freshness if brave_freshness in allowed_f else "pd"
+        dg.use_brave = use_brave
+        dg.collect_limit = max(3, min(40, collect_limit))
+        dg.jitter_min = max(0, min(60, jitter_min))
+        dg.enabled = enabled
+        s.add(dg)
+        s.commit()
+    scheduler.reload_jobs()
+    return _redirect(f"/digests/{digest_id}", "Настройки дайджеста сохранены")
+
+
+@router.post("/digests/{digest_id}/delete")
+def delete_digest(digest_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        dg = s.get(Digest, digest_id)
+        if dg:
+            for src in s.exec(
+                select(DigestSource).where(DigestSource.digest_id == digest_id)
+            ).all():
+                s.delete(src)
+            s.delete(dg)
+            s.commit()
+    scheduler.reload_jobs()
+    return _redirect("/digests", "Дайджест удалён")
+
+
+@router.post("/digests/{digest_id}/run")
+def digest_run_now(digest_id: int) -> RedirectResponse:
+    from app.digest.service import run_digest
+
+    res = run_digest(digest_id)
+    if res.get("ok"):
+        msg = f"Опубликован ✓ (новостей: {res.get('items', 0)}, Brave: {res.get('brave', 0)})"
+    else:
+        msg = f"Не опубликован: {res.get('note', '')[:160]}"
+    return _redirect(f"/digests/{digest_id}", msg)
+
+
+@router.post("/digests/{digest_id}/sources")
+def digest_add_source(
+    digest_id: int, name: str = Form(...), url: str = Form(...)
+) -> RedirectResponse:
+    with Session(engine) as s:
+        s.add(DigestSource(digest_id=digest_id, name=name.strip(), url=url.strip()))
+        s.commit()
+    return _redirect(f"/digests/{digest_id}", "Источник добавлен")
+
+
+@router.post("/digest-sources/{source_id}")
+def digest_edit_source(
+    source_id: int, name: str = Form(...), url: str = Form(...)
+) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(DigestSource, source_id)
+        if not src:
+            return _redirect("/digests", "Источник не найден")
+        src.name = name.strip()
+        src.url = url.strip()
+        s.add(src)
+        s.commit()
+        did = src.digest_id
+    return _redirect(f"/digests/{did}", "Источник сохранён")
+
+
+@router.post("/digest-sources/{source_id}/delete")
+def digest_delete_source(source_id: int) -> RedirectResponse:
+    with Session(engine) as s:
+        src = s.get(DigestSource, source_id)
+        did = src.digest_id if src else None
+        if src:
+            s.delete(src)
+            s.commit()
+    return _redirect(f"/digests/{did}" if did else "/digests", "Источник удалён")
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, msg: str = "") -> HTMLResponse:
     with Session(engine) as s:
@@ -1184,6 +1350,7 @@ def save_settings(
     notify_daily: bool = Form(False),
     notify_daily_time: str = Form("09:00"),
     giphy_api_key: str = Form(""),
+    brave_api_key: str = Form(""),
 ) -> RedirectResponse:
     # На странице две независимые формы (общие настройки и бот мониторинга), обе
     # постят сюда. Обновляем ТОЛЬКО поля присланной секции, чтобы сохранение одной
@@ -1208,6 +1375,9 @@ def save_settings(
             # ключ Giphy пустой = не менять (секрет)
             if giphy_api_key.strip():
                 config.giphy_api_key = giphy_api_key.strip()
+            # ключ Brave Search пустой = не менять (секрет)
+            if brave_api_key.strip():
+                config.brave_api_key = brave_api_key.strip()
         s.add(config)
         s.commit()
     scheduler.reload_jobs()  # перерегистрировать задачу ежедневной сводки

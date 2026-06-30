@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Дайджесты{% endblock %}
+{% block content %}
+
+<h2 class="page-title">Дайджесты</h2>
+<p class="muted" style="margin-top:-8px">Вечерний итоговый пост для соцсети: пул новостей из лент дайджеста → ранжирование по актуальности через Brave (без расхода токенов) → один вызов LLM собирает финальный пост → публикация в заданное время.</p>
+
+{% if not has_accounts %}
+<div class="banner warn">
+  <div><b>Сначала заведите соц-аккаунт.</b> Дайджест публикуется в существующий аккаунт <a href="/instagram">Instagram</a>, <a href="/telegram">Telegram</a> или <a href="/x">X</a>.</div>
+</div>
+{% endif %}
+{% if not brave_set %}
+<div class="banner">
+  <div>Ключ <b>Brave Search</b> не задан — дайджест будет ранжировать ленты только по свежести. Задать ключ можно в <a href="/settings">Настройках</a> (бесплатный, токены LLM не тратит).</div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 class="card-title">Новый дайджест</h3>
+  <form method="post" action="/digests">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:200px">
+        <label style="margin-top:0">Название</label>
+        <input type="text" name="name" required placeholder="Итоги дня · новости / Кино на вечер">
+      </div>
+      <button class="primary" type="submit">Создать</button>
+    </div>
+  </form>
+</div>
+
+{% for dg in digests %}
+<div class="card">
+  <div class="row-head">
+    <div>
+      <a href="/digests/{{ dg.id }}"><strong>{{ dg.name }}</strong></a>
+      <div class="meta">
+        <span class="badge {% if dg.enabled %}ok{% else %}off{% endif %}">{{ 'автопилот' if dg.enabled else 'выключен' }}</span>
+        <span class="badge">{{ dg.platform|upper }}</span>
+        <span>🕒 {{ dg.publish_time }}</span>
+        <span class="badge {% if dg.use_brave %}count{% else %}off{% endif %}">{{ 'Brave' if dg.use_brave else 'по свежести' }}</span>
+        <span>новостей в LLM: {{ dg.collect_limit }}</span>
+      </div>
+      {% if dg.last_note %}<div class="muted" style="margin-top:6px">Последний прогон: {{ dg.last_note }}</div>{% endif %}
+    </div>
+    <a href="/digests/{{ dg.id }}"><button type="button">Открыть</button></a>
+  </div>
+</div>
+{% else %}
+<p class="muted">Дайджестов пока нет. Создайте первый выше.</p>
+{% endfor %}
+
+{% endblock %}

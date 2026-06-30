@@ -260,6 +260,14 @@ def x_publish(account_id: int) -> dict:
     return run_x_publish(account_id, count=1)
 
 
+# ── Дайджесты ─────────────────────────────────────────────────────────
+@api_router.post("/digest/{digest_id}/run", dependencies=[Depends(require_api_key)])
+def digest_run(digest_id: int) -> dict:
+    from app.digest.service import run_digest
+
+    return run_digest(digest_id)
+
+
 # ── LLM ───────────────────────────────────────────────────────────────
 @api_router.post("/llm/test", dependencies=[Depends(require_api_key)])
 def llm_test() -> dict:

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}{{ dg.name }} — Дайджест{% endblock %}
+{% block content %}
+
+<a class="page-back" href="/digests">← Все дайджесты</a>
+<h2 class="page-title">{{ dg.name }}</h2>
+
+{% if dg.last_note %}
+<div class="banner {% if 'опубликован' in dg.last_note %}ok{% elif 'ошибка' in dg.last_note or 'нет' in dg.last_note %}err{% endif %}">
+  <div><b>Последний прогон:</b> {{ dg.last_note }}
+  {% if dg.last_run_at %}<div class="muted" style="margin-top:2px">{{ dg.last_run_at.strftime('%Y-%m-%d %H:%M UTC') }}</div>{% endif %}</div>
+</div>
+{% endif %}
+{% if not brave_set and dg.use_brave %}
+<div class="banner warn">
+  <div>Brave-ранжирование включено, но ключ Brave не задан в <a href="/settings">Настройках</a> — пока ранжирование идёт только по свежести лент.</div>
+</div>
+{% endif %}
+
+<!-- Настройки дайджеста -->
+<div class="card">
+  <h3 class="card-title">Настройки</h3>
+  <form method="post" action="/digests/{{ dg.id }}">
+    <label>Название</label>
+    <input type="text" name="name" value="{{ dg.name }}" required>
+
+    <label>Куда публиковать <span class="muted">(существующий соц-аккаунт — берутся его доступы и публикация)</span></label>
+    <select name="target">
+      {% for plat, label in [('ig','Instagram'), ('tg','Telegram'), ('x','X')] %}
+        {% if accounts[plat] %}
+        <optgroup label="{{ label }}">
+          {% for a in accounts[plat] %}
+          <option value="{{ plat }}:{{ a.id }}" {% if dg.platform==plat and dg.account_id==a.id %}selected{% endif %}>{{ label }} · {{ a.name }}</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+      {% endfor %}
+    </select>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <label>Язык поста <span class="muted">(пусто — язык аккаунта)</span></label>
+        <select name="language">
+          <option value="" {% if not dg.language %}selected{% endif %}>— как у аккаунта —</option>
+          {% for code, lbl in languages %}
+          <option value="{{ code }}" {% if dg.language==code %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="min-width:130px">
+        <label>Время публикации</label>
+        <input type="time" name="publish_time" value="{{ dg.publish_time }}">
+      </div>
+      <div style="min-width:130px">
+        <label>Сдвиг ±мин</label>
+        <input type="number" name="jitter_min" value="{{ dg.jitter_min }}" min="0" max="60">
+      </div>
+    </div>
+
+    <label style="margin-top:14px">Инструкция для LLM <span class="muted">— что именно нужно получить в итоге (структура, рубрики, для кино — рекомендации и рейтинги). Редактируйте под себя.</span></label>
+    <textarea name="instructions" style="min-height:180px">{{ dg.instructions }}</textarea>
+
+    <hr class="divider">
+    <h4 style="margin:4px 0 2px">Ранжирование по актуальности (Brave Search)</h4>
+    <p class="muted" style="margin-top:2px">Brave сортирует собранный пул по свежести/важности темы — без расхода токенов LLM. LLM вызывается один раз, уже на готовый итоговый пост.</p>
+    <label><input type="checkbox" name="use_brave" {% if dg.use_brave %}checked{% endif %}> Использовать Brave для ранжирования</label>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:2;min-width:200px">
+        <label>Тема для Brave <span class="muted">(напр. «новости Прага сегодня» или «новые фильмы 2026»)</span></label>
+        <input type="text" name="brave_query" value="{{ dg.brave_query }}" placeholder="новости Чехия сегодня">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label>Окно свежести</label>
+        <select name="brave_freshness">
+          {% for code, lbl in freshness %}
+          <option value="{{ code }}" {% if dg.brave_freshness==code %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="min-width:160px">
+        <label>Новостей в LLM <span class="muted">(вход = токены)</span></label>
+        <input type="number" name="collect_limit" value="{{ dg.collect_limit }}" min="3" max="40">
+      </div>
+    </div>
+
+    <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if dg.enabled %}checked{% endif %}> Автопилот включён (публиковать ежедневно в заданное время)</label>
+    <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
+  </form>
+</div>
+
+<!-- Действия -->
+<div class="card">
+  <h3 class="card-title">Действия</h3>
+  <div class="actions" style="flex-wrap:wrap">
+    <form method="post" action="/digests/{{ dg.id }}/run">
+      <button class="primary" type="submit">Собрать и опубликовать сейчас</button>
+    </form>
+    <form method="post" action="/digests/{{ dg.id }}/delete" onsubmit="return confirm('Удалить дайджест?')">
+      <button class="danger" type="submit">Удалить дайджест</button>
+    </form>
+  </div>
+  {% if runs %}
+  <p class="muted" style="margin-bottom:0">Ближайший запуск:
+    {% for r in runs %}{{ r.next_run or "—" }}{% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+<!-- Источники -->
+<div class="card">
+  <h3 class="card-title">RSS-источники дайджеста</h3>
+  <p class="muted" style="margin-top:0">Свой список лент именно для этого дайджеста. Из них собирается пул новостей дня (без LLM), который затем ранжируется и сворачивается в один пост.</p>
+  <form method="post" action="/digests/{{ dg.id }}/sources">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:120px">
+        <label style="margin-top:0">Название</label>
+        <input type="text" name="name" required placeholder="ČT24 / IMDb">
+      </div>
+      <div style="flex:2;min-width:200px">
+        <label style="margin-top:0">RSS URL</label>
+        <input type="url" name="url" required placeholder="https://.../rss">
+      </div>
+      <button class="primary" type="submit">Добавить</button>
+    </div>
+  </form>
+
+  {% if sources %}
+    {% for src in sources %}
+    <form method="post" action="/digest-sources/{{ src.id }}"
+          style="border-top:1px solid var(--b);padding-top:10px;margin-top:10px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:120px">
+          <label style="margin-top:0">Название</label>
+          <input type="text" name="name" value="{{ src.name }}" required>
+        </div>
+        <div style="flex:2;min-width:200px">
+          <label style="margin-top:0">RSS URL</label>
+          <input type="url" name="url" value="{{ src.url }}" required>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:8px">
+        <button class="primary" type="submit">Сохранить</button>
+        <button class="danger" type="submit" formaction="/digest-sources/{{ src.id }}/delete">Удалить</button>
+      </div>
+    </form>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Источников пока нет — добавьте хотя бы один.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

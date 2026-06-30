@@ -114,6 +114,9 @@ class AppConfig(SQLModel, table=True):
     notify_daily_time: str = "09:00"  # время сводки (по TZ приложения)
     # Giphy: анимированные стикеры по теме на сториз (бесплатный ключ api.giphy.com).
     giphy_api_key: str = ""
+    # Brave Search API: ранжирование новостей дайджеста по актуальности (бесплатный
+    # ключ на api.search.brave.com). LLM при этом не тратится — ранжирует Brave.
+    brave_api_key: str = ""
 
 
 class LLMCache(SQLModel, table=True):
@@ -318,6 +321,60 @@ class XPost(SQLModel, table=True):
     published_at: datetime | None = None
     publish_note: str = ""
     tweet_id: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ── Дайджест (соцсети) ────────────────────────────────────────────────
+# Отдельная логика от пер-статейной публикации: вечером собирается ПУЛ новостей
+# из лент дайджеста, Brave Search ранжирует их по актуальности (без токенов),
+# затем ОДИН вызов LLM собирает итоговый пост и он сразу публикуется в соцсеть.
+
+# Инструкция по умолчанию: что должен выдать LLM. Полностью редактируется в админке.
+DEFAULT_DIGEST_INSTRUCTIONS = (
+    "Собери из присланных новостей единый итоговый пост-дайджест дня для соцсети.\n"
+    "Структура:\n"
+    "• «🔥 Главное» — 2–3 самые важные новости, по 1–2 живых предложения;\n"
+    "• «📌 Коротко» — 4–6 второстепенных пунктов одной строкой каждый.\n"
+    "Пиши живо и по-человечески, без воды и канцелярита. НЕ выдумывай факты — "
+    "опирайся только на присланные заголовки и аннотации.\n\n"
+    "Если тема про кино и ТВ — вместо новостей сделай подборку «Что посмотреть "
+    "вечером»: 3–5 фильмов/передач с короткой подачей и рейтингом (если он есть "
+    "в данных)."
+)
+
+# Тарифы свежести Brave (код → метка).
+BRAVE_FRESHNESS = [("pd", "За сутки"), ("pw", "За неделю"), ("pm", "За месяц")]
+
+
+class Digest(SQLModel, table=True):
+    """Вечерний дайджест для соцсети: пул новостей → Brave-ранжирование → 1 пост."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    platform: str = "tg"          # ig | tg | x — целевая соцсеть
+    account_id: int = 0           # id соответствующего соц-аккаунта (creds/публикация)
+    language: str = ""            # язык поста; пусто → берём язык аккаунта
+    publish_time: str = "18:00"   # время вечерней сборки И публикации (ежедневно)
+    instructions: str = DEFAULT_DIGEST_INSTRUCTIONS  # редактируемая инструкция LLM
+    brave_query: str = ""         # тема для Brave-ранжирования (напр. «новости Прага»)
+    brave_freshness: str = "pd"   # pd | pw | pm — окно свежести Brave
+    use_brave: bool = True        # ранжировать через Brave (иначе только по свежести)
+    collect_limit: int = 12       # сколько новостей подаём в LLM (это и есть расход токенов)
+    jitter_min: int = 0           # случайный сдвиг времени публикации ±N минут
+    enabled: bool = True
+    last_run_at: datetime | None = None
+    last_note: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class DigestSource(SQLModel, table=True):
+    """RSS-источник, привязанный к дайджесту (свой список лент у каждого дайджеста)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    digest_id: int = Field(index=True)
+    name: str
+    url: str
+    enabled: bool = True
     created_at: datetime = Field(default_factory=_now)
 
 

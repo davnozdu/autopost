@@ -14,8 +14,9 @@ from sqlmodel import Session, select
 
 from app import notify, services
 from app.config import get_settings
-from app.db.models import AppConfig, IGAccount, Site, TGAccount, XAccount
+from app.db.models import AppConfig, Digest, IGAccount, Site, TGAccount, XAccount
 from app.db.session import engine
+from app.digest import service as digest_service
 from app.instagram import service as ig_service
 from app.telegram import service as tg_service
 from app.x import service as x_service
@@ -61,6 +62,9 @@ def reload_jobs() -> None:
         ).all()
         x_accounts = s.exec(
             select(XAccount).where(XAccount.enabled == True)  # noqa: E712
+        ).all()
+        digests = s.exec(
+            select(Digest).where(Digest.enabled == True)  # noqa: E712
         ).all()
         cfg = s.get(AppConfig, 1)
     tz = _tz()
@@ -182,6 +186,20 @@ def reload_jobs() -> None:
                     CronTrigger(hour=ph, minute=pm, timezone=tz, jitter=jit),
                     args=[acc.id, i > 0], id=f"x-post-{acc.id}-{i}", replace_existing=True,
                 )
+        except Exception:
+            continue
+
+    # Дайджесты: ежедневно в заданное вечернее время — сборка + публикация одним
+    # прогоном (Brave ранжирует, LLM зовётся один раз). jitter — естественность.
+    for dg in digests:
+        try:
+            jit = (dg.jitter_min if dg.jitter_min and dg.jitter_min > 0 else 0) * 60
+            ph, pm = services._parse_hhmm(dg.publish_time)
+            _scheduler.add_job(
+                digest_service.run_digest,
+                CronTrigger(hour=ph, minute=pm, timezone=tz, jitter=jit or None),
+                args=[dg.id], id=f"digest-{dg.id}", replace_existing=True,
+            )
         except Exception:
             continue
 

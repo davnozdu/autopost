@@ -260,6 +260,54 @@ def build_x_prompt(config: AppConfig, news: dict, language: str | None = None) -
     return system, user
 
 
+def build_digest_prompt(
+    items: list[dict],
+    instructions: str,
+    language: str,
+    *,
+    max_chars: int = 0,
+) -> tuple[str, str]:
+    """Промпт ОДНОГО итогового поста-дайджеста из списка новостей дня.
+
+    На вход подаём только заголовки + короткие аннотации (не полные тексты) —
+    это и есть весь расход токенов на дайджест за день. `instructions` —
+    редактируемая пользователем инструкция «что мне нужно получить в итоге».
+    Возвращает JSON {caption, hashtags}; разбирается через parse_ig_parts.
+    """
+    lang = (language or "ru").strip()
+    lines = []
+    for i, it in enumerate(items, 1):
+        title = (it.get("title") or "").strip()
+        summary = (it.get("summary") or "").strip()[:220]
+        lines.append(f"{i}. {title}" + (f" — {summary}" if summary else ""))
+
+    rules = [
+        _lang_rule(lang),
+        "Sestav JEDEN souhrnný příspěvek (denní digest) z níže uvedených zpráv pro "
+        "sociální síť. Lidský, živý tón, bez klišé a vaty. NEvymýšlej fakta — "
+        "vycházej VÝHRADNĚ z dodaných zpráv. NEzmiňuj zdroj a nevkládej do textu odkazy.",
+    ]
+    if max_chars:
+        rules.append(f"Text příspěvku (caption) musí být MAX {max_chars} znaků.")
+    if (instructions or "").strip():
+        rules.append(
+            "Pokyny editora (DODRŽ je co nejpřesněji, mají přednost před formátem výše):\n"
+            + instructions.strip()
+        )
+    rules.append(
+        "Vrať POUZE validní JSON bez dalšího textu, přesně v tomto tvaru:\n"
+        '{"caption": "...", "hashtags": ["...", "..."]}\n'
+        "- caption: text příspěvku bez hashtagů;\n"
+        "- hashtags: 3–8 relevantních hashtagů bez znaku #, malými písmeny."
+    )
+    system = (
+        "Jsi zkušený editor, který připravuje denní souhrn (digest) pro sociální sítě. "
+        + " ".join(rules)
+    )
+    user = "Zprávy dne (seřazené od nejaktuálnějších):\n" + "\n".join(lines) + _lang_reminder(lang)
+    return system, user
+
+
 def parse_ig_parts(raw: str, fallback_text: str = "") -> tuple[str, list[str]]:
     """Разобрать ответ модели на (текст подписи, список хэштегов без '#')."""
     data = _extract_json(raw) or {}

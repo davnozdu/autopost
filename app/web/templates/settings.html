@@ -32,6 +32,9 @@
     <label style="margin-top:14px">Ключ Giphy API <span class="muted">— для анимированных GIF-стикеров по теме на сториз (бесплатный на developers.giphy.com){% if config.giphy_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
     <input type="text" name="giphy_api_key" value="" placeholder="{% if config.giphy_api_key %}••••••••{% else %}dc6zaTOxFJmzC{% endif %}">
 
+    <label style="margin-top:14px">Ключ Brave Search API <span class="muted">— для ранжирования новостей дайджеста по актуальности (бесплатный на api.search.brave.com); токены LLM при этом не тратятся{% if config.brave_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="brave_api_key" value="" placeholder="{% if config.brave_api_key %}••••••••{% else %}BSA...{% endif %}">
+
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
 </div>
