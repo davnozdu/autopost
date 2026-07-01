@@ -351,21 +351,18 @@ def build_movie_digest_prompt(
 
     rules = [
         _lang_rule(lang),
-        "Sestav podle níže uvedených novinek jednu podborku «co se dnes večer podívat» "
-        "pro Telegram. Lidský, živý tón, bez klišé. NEvymýšlej fakta ani hodnocení — "
-        "použij jen dodané údaje. NEvkládej do textu odkazy (magnet odkazy půjdou "
-        "samostatným komentářem).",
+        "Napiš KRÁTKÝ poutavý úvod (1 věta, klidně 1 emoji) k večernímu výběru filmových "
+        "novinek pro Telegram — sám seznam filmů sestaví aplikace, ty jen úvodní větu. "
+        "Lidský, živý tón, bez klišé. NEvypisuj filmy, NEvkládej odkazy.",
     ]
-    if max_chars:
-        rules.append(f"Text (caption) MAX {max_chars} znaků.")
     if (instructions or "").strip():
-        rules.append("Pokyny editora (DODRŽ přednostně):\n" + instructions.strip())
+        rules.append("Pokyny editora (zohledni tón):\n" + instructions.strip())
     rules.append(
         "Vrať POUZE validní JSON: {\"caption\": \"...\", \"hashtags\": [\"...\"]} — "
-        "caption bez hashtagů; hashtags 3–6 bez #, malými písmeny."
+        "caption = jen úvodní věta bez filmů a bez hashtagů; hashtags 3–6 bez #, malými písmeny."
     )
     system = "Jsi filmový redaktor, který dělá večerní výběr novinek pro Telegram. " + " ".join(rules)
-    user = "Novinky (fily/seriály):\n" + "\n".join(lines) + _lang_reminder(lang)
+    user = "Dnešní novinky (pro kontext úvodu):\n" + "\n".join(lines) + _lang_reminder(lang)
     return system, user
 
 

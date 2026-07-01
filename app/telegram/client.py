@@ -116,12 +116,12 @@ class TGClient:
         return None, None
 
     def send_post(self, caption: str, image_url: str | None,
-                  comment_html: str = "", comment_mode: str = "HTML") -> str:
-        """Основной пост (текст/фото, без ссылки) + первый комментарий.
+                  comment_html: str = "", comment_mode: str = "HTML",
+                  caption_mode: str = "") -> str:
+        """Основной пост (текст/фото) + первый комментарий.
 
-        Комментарий уходит в группу обсуждений ответом на авто-пересланный пост
-        (для канала). `comment_mode`: "HTML" (кликабельная ссылка-бэклинк) или ""
-        (плейн-текст — для magnet-ссылок, Telegram делает их тапабельными сам).
+        `caption_mode`: "" (плейн) или "HTML" (жирный/оформление подписи поста).
+        `comment_mode`: "HTML" (кликабельная ссылка) или "" (плейн — для magnet).
         Возвращает message_id основного поста. Ошибка комментария не валит пост.
         """
         text = caption or ""
@@ -129,25 +129,56 @@ class TGClient:
         mid = None
         if img:
             try:
-                res = self._call("sendPhoto", {
-                    "chat_id": self.chat_id, "photo": img,
-                    "caption": text[:TG_CAPTION_LIMIT],
-                })
-                mid = res.get("message_id")
+                p = {"chat_id": self.chat_id, "photo": img, "caption": text[:TG_CAPTION_LIMIT]}
+                if caption_mode:
+                    p["parse_mode"] = caption_mode
+                mid = self._call("sendPhoto", p).get("message_id")
             except TGError:
                 mid = None  # картинка не принялась — отправим текстом ниже
         if mid is None:
-            res = self._call("sendMessage", {
-                "chat_id": self.chat_id, "text": text[:TG_TEXT_LIMIT],
-                "disable_web_page_preview": True,
-            })
-            mid = res.get("message_id")
+            p = {"chat_id": self.chat_id, "text": text[:TG_TEXT_LIMIT],
+                 "disable_web_page_preview": True}
+            if caption_mode:
+                p["parse_mode"] = caption_mode
+            mid = self._call("sendMessage", p).get("message_id")
 
         if comment_html.strip() and mid:
             try:
                 self._post_comment(int(mid), comment_html, comment_mode)
             except Exception:
                 pass  # комментарий best-effort
+        return str(mid or "")
+
+    def send_album(self, caption: str, image_urls: list[str],
+                   comment_html: str = "", comment_mode: str = "",
+                   caption_mode: str = "HTML") -> str:
+        """Альбом постеров (media group) + подпись на первом фото + первый комментарий.
+
+        При сбое альбома — откат на одиночное фото/текст (send_post). Комментарий
+        (magnet) отвечает на первое сообщение альбома.
+        """
+        urls = [u for u in (clean_image_url(x) for x in image_urls) if u][:10]
+        if len(urls) < 2:
+            return self.send_post(caption, urls[0] if urls else None,
+                                   comment_html, comment_mode, caption_mode)
+        media = []
+        for i, u in enumerate(urls):
+            m = {"type": "photo", "media": u}
+            if i == 0 and caption:
+                m["caption"] = caption[:TG_CAPTION_LIMIT]
+                if caption_mode:
+                    m["parse_mode"] = caption_mode
+            media.append(m)
+        try:
+            res = self._call("sendMediaGroup", {"chat_id": self.chat_id, "media": media})
+            mid = res[0].get("message_id") if isinstance(res, list) and res else None
+        except TGError:
+            return self.send_post(caption, urls[0], comment_html, comment_mode, caption_mode)
+        if comment_html.strip() and mid:
+            try:
+                self._post_comment(int(mid), comment_html, comment_mode)
+            except Exception:
+                pass
         return str(mid or "")
 
     def _post_comment(self, posted_msg_id: int, comment: str,
