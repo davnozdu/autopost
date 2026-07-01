@@ -42,14 +42,57 @@ def _strip_html(s: str) -> str:
     return BeautifulSoup(s or "", "html.parser").get_text(" ", strip=True)
 
 
+# Ссылки-«пустышки»: трекинг-пиксели feedburner/feedsportal, 1×1, рекламные сети.
+# Их НЕ берём как картинку поста (иначе вместо фото уйдёт невидимый пиксель).
+_IMG_TRACKER_RE = re.compile(
+    r"feedburner|feedsportal|doubleclick|googleads|/~[0-9a-z]+/|~r/|"
+    r"1x1|pixel|spacer|blank\.(?:gif|png)|/stat[/.]|/track",
+    re.I,
+)
+
+
+def _img_from_html(html: str) -> str | None:
+    """Первый осмысленный <img> из HTML описания/контента (без трекинг-пикселей)."""
+    if not html:
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    for img in soup.find_all("img"):
+        src = (img.get("src") or img.get("data-src") or "").strip()
+        if not src or src.startswith("data:"):
+            continue
+        if _IMG_TRACKER_RE.search(src):
+            continue
+        if str(img.get("width")) in ("0", "1") or str(img.get("height")) in ("0", "1"):
+            continue  # пиксель-трекер по размеру
+        return src
+    return None
+
+
 def _entry_image(entry) -> str | None:
+    """Картинка записи ленты: media/enclosure → <img> в описании/контенте."""
+    # 1) media:content / media:thumbnail (список или одиночный объект)
     for key in ("media_content", "media_thumbnail"):
         media = entry.get(key)
-        if isinstance(media, list) and media and media[0].get("url"):
-            return media[0]["url"]
-    for enc in entry.get("enclosures", []) or []:
-        if enc.get("href") and "image" in (enc.get("type") or ""):
-            return enc["href"]
+        if isinstance(media, list):
+            for m in media:
+                if m.get("url") and not _IMG_TRACKER_RE.search(m["url"]):
+                    return m["url"]
+        elif isinstance(media, dict) and media.get("url"):
+            return media["url"]
+    # 2) enclosures / links с типом image
+    for enc in (entry.get("enclosures", []) or []) + (entry.get("links", []) or []):
+        href = enc.get("href") or enc.get("url")
+        typ = (enc.get("type") or "")
+        rel = (enc.get("rel") or "")
+        if href and ("image" in typ or (rel == "enclosure" and "image" in typ)):
+            return href
+    # 3) <img> внутри content:encoded / summary (частый случай — film.ru и др.)
+    htmls = [c.get("value", "") for c in (entry.get("content") or [])]
+    htmls.append(entry.get("summary", ""))
+    for html in htmls:
+        found = _img_from_html(html)
+        if found:
+            return found
     return None
 
 
@@ -81,7 +124,9 @@ def _peek_feed_uncached(feed_url: str, limit: int = MAX_ITEMS) -> dict:
         entries.append(
             {
                 "title": entry.get("title", "(bez názvu)"),
-                "link": entry.get("link", ""),
+                # feedburner отдаёт редирект-ссылку (feeds.*/~r/...), которая часто
+                # не открывается (501) → берём оригинальную ссылку статьи.
+                "link": entry.get("feedburner_origlink") or entry.get("link", ""),
                 "published": entry.get("published", ""),
                 "summary": _strip_html(entry.get("summary", ""))[:300],
                 "image": _entry_image(entry),
@@ -102,7 +147,7 @@ def collect_feed(feed_name: str, feed_url: str, analysis_dir: Path) -> tuple[lis
 
     items: list[dict] = []
     for i, entry in enumerate(parsed.entries[:MAX_ITEMS]):
-        link = entry.get("link", "")
+        link = entry.get("feedburner_origlink") or entry.get("link", "")
         title = entry.get("title", "(bez názvu)")
         text = _strip_html(entry.get("summary", ""))
         image = _entry_image(entry)

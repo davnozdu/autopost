@@ -235,6 +235,15 @@ def run_digest(digest_id: int) -> dict:
 
     caption = _compose(body, hashtags, maxc)
     image = next((it.get("image") for it in top if it.get("image")), None)
+    if not image and top and top[0].get("link"):
+        # ни у одной новости нет картинки в ленте — берём og:image со страницы
+        # верхней новости (один заход на страницу, токены не тратятся).
+        try:
+            from app.scraper.extract import extract_image, fetch_html
+            link = top[0]["link"]
+            image = clean_image_url(extract_image(fetch_html(link), link))
+        except Exception:
+            image = None
 
     # 4) публикация
     ok, note = _publish(dg, caption, image)
