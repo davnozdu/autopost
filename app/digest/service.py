@@ -264,16 +264,25 @@ def run_digest(digest_id: int) -> dict:
 
 
 # ── Movies-дайджест (торренты через Torznab) ──────────────────────────
+def _english_title(title: str) -> str:
+    """Из «Русское / English» → английскую часть (лучше матчится в OMDb)."""
+    if "/" in (title or ""):
+        return title.split("/")[-1].strip()
+    return (title or "").strip()
+
+
 def _movie_magnet_comment(items: list[dict]) -> str:
-    """Первый комментарий с magnet-ссылками (плейн-текст: Telegram делает их тапабельными)."""
+    """Первый комментарий: magnet (плейн-текст, Telegram делает тапабельным) или,
+    если magnet нет, ссылка на страницу трекера. Download-ссылку Prowlarr НЕ
+    публикуем — в ней apikey и локальный адрес сервера."""
     lines = []
     for it in items:
         icon = "📺" if (it.get("is_series") or it.get("omdb_type") == "series") else "🎬"
         title = it.get("omdb_title") or it.get("title") or it.get("raw_title", "")
         year = f" ({it['year']})" if it.get("year") else ""
-        magnet = it.get("magnet", "")
-        if magnet:
-            lines.append(f"{icon} {title}{year}\n{magnet}")
+        link = it.get("magnet") or it.get("page_url") or ""
+        if link:
+            lines.append(f"{icon} {title}{year}\n{link}")
     return "\n\n".join(lines)
 
 
@@ -283,7 +292,7 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         _finish(dg.id, "movies-дайджест доступен только для Telegram")
         return {"ok": False, "note": "movies только для Telegram"}
 
-    from app.digest import ratings, torznab
+    from app.digest import ratings, torrentfile, torznab
 
     # 1) собрать релизы из всех Torznab-эндпоинтов (без LLM)
     raw: list[dict] = []
@@ -293,23 +302,30 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         _finish(dg.id, "Torznab: пусто или эндпоинт недоступен")
         return {"ok": False, "note": "Torznab: пусто/недоступен"}
 
-    # 2) свернуть дубли, оставить «живые» раздачи с magnet
+    # 2) свернуть дубли, оставить «живые» раздачи (magnet добудем ниже)
     items = torznab.dedup_best(raw)
-    items = [x for x in items
-             if x.get("seeders", 0) >= max(0, dg.min_seeders) and x.get("magnet")]
+    items = [x for x in items if x.get("seeders", 0) >= max(0, dg.min_seeders)]
     if not items:
-        _finish(dg.id, "нет раздач с magnet и нужным числом сидов")
+        _finish(dg.id, "нет раздач с нужным числом сидов")
         return {"ok": False, "note": "нет подходящих раздач"}
 
     # 3) ранжирование по сидам (recent-листинг уже даёт свежесть), топ 2–5
     items.sort(key=lambda x: x.get("seeders", 0), reverse=True)
     top = items[: min(max(dg.collect_limit, 2), 5)]
 
-    # 4) рейтинг + постер (OMDb, без токенов)
+    # 4) для выбранных: если magnet нет — добыть из .torrent (через download-ссылку
+    #    Prowlarr); английское название для OMDb. Только 2–5 штук → дёшево.
+    for it in top:
+        if not it.get("magnet") and it.get("download_url"):
+            nm = it.get("title") or it.get("raw_title")
+            it["magnet"] = torrentfile.magnet_from_url(it["download_url"], name=nm) or ""
+        it["en_title"] = _english_title(it.get("title", ""))
+
+    # 5) рейтинг + постер (OMDb, без токенов)
     for it in top:
         ratings.enrich(it, config.omdb_api_key)
 
-    # 5) ОДИН вызов LLM → подпись подборки
+    # 6) ОДИН вызов LLM → подпись подборки
     instructions = (dg.instructions or "").strip() or DEFAULT_MOVIE_INSTRUCTIONS
     system, user = build_movie_digest_prompt(top, instructions, language, max_chars=900)
     try:

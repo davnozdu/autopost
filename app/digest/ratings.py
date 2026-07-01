@@ -17,8 +17,8 @@ def enrich(item: dict, api_key: str, timeout: int = 15) -> None:
     params = {"apikey": api_key}
     if item.get("imdbid"):
         params["i"] = item["imdbid"]
-    elif item.get("title"):
-        params["t"] = item["title"]
+    elif item.get("en_title") or item.get("title"):
+        params["t"] = item.get("en_title") or item["title"]
         if item.get("year"):
             params["y"] = item["year"]
     else:

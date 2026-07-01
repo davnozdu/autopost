@@ -73,18 +73,21 @@ def fetch(base_url: str, categories: str = "", limit: int = 100,
             continue
         d = {
             "raw_title": raw,
-            "link": (it.findtext("link") or "").strip(),
             "pubdate": (it.findtext("pubDate") or "").strip(),
+            "page_url": (it.findtext("comments") or "").strip(),  # страница на трекере
             "seeders": 0, "size": _int(it.findtext("size") or ""),
-            "imdbid": "", "magnet": "", "categories": [],
+            "imdbid": "", "magnet": "", "download_url": "", "infohash": "",
+            "categories": [],
         }
+        # link / enclosure: либо magnet, либо download-ссылка (.torrent / прокси Prowlarr)
+        link = (it.findtext("link") or "").strip()
         enc = it.find("enclosure")
-        if enc is not None:
-            href = enc.get("url", "") or ""
-            if href.startswith("magnet:"):
-                d["magnet"] = href
-            elif not d["link"]:
-                d["link"] = href
+        enc_url = (enc.get("url", "") if enc is not None else "") or ""
+        for u in (link, enc_url):
+            if u.startswith("magnet:") and not d["magnet"]:
+                d["magnet"] = u
+            elif u and not d["download_url"]:
+                d["download_url"] = u
         # torznab/newznab-атрибуты
         for tag in _ATTR_TAGS:
             for attr in it.findall(tag):
@@ -96,12 +99,16 @@ def fetch(base_url: str, categories: str = "", limit: int = 100,
                     d["size"] = _int(val)
                 elif name in ("magneturl", "magnet") and val.startswith("magnet:"):
                     d["magnet"] = val
+                elif name == "infohash" and val.strip():
+                    d["infohash"] = re.sub(r"[^0-9A-Fa-f]", "", val)
                 elif name in ("imdb", "imdbid"):
                     d["imdbid"] = _imdb(val)
                 elif name == "category":
                     d["categories"].append(val)
-        if not d["magnet"] and d["link"].startswith("magnet:"):
-            d["magnet"] = d["link"]
+        # magnet из infohash, если трекер дал хэш, но не magnet
+        if not d["magnet"] and len(d["infohash"]) in (40, 32):
+            from urllib.parse import quote
+            d["magnet"] = f"magnet:?xt=urn:btih:{d['infohash']}&dn={quote(raw[:120])}"
         title, year = release.clean_title(raw)
         d["title"] = title
         d["year"] = year
