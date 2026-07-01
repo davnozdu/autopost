@@ -93,18 +93,25 @@
 
     <hr class="divider">
     <h4 style="margin:4px 0 2px">Новинки кино (только режим «Новинки кино»)</h4>
-    <p class="muted" style="margin-top:2px">Источники ниже (RSS-блок) должны быть <b>Torznab feed URL</b> из Prowlarr/Jackett (с apikey). Робот берёт свежие релизы, свернёт дубли, оставит живые раздачи с magnet, возьмёт топ по сидам. В LLM подаётся 2–5 (поле «Новостей в LLM»). Категории Newznab: 2000 фильмы, 5000 сериалы, 5070 аниме, 3000 музыка, 1000/4000 игры, 7000 книги, 8000 другое.</p>
+    <p class="muted" style="margin-top:2px">Источники берутся <b>автоматически из Prowlarr</b> (все индексаторы разом) — вести список URL не нужно. Просто отметь, что публиковать; робот возьмёт свежие релизы этих категорий, свернёт дубли, добудет magnet и опубликует топ 2–5 (поле «сколько в LLM») по свежести.</p>
+    {% if not prowlarr_set %}<div class="banner warn"><div>Prowlarr не задан — укажи адрес и API-ключ в <a href="/settings">Настройках</a> (кнопка «Проверить Prowlarr» покажет индексаторы).</div></div>{% endif %}
+    <label>Что публиковать</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 18px">
+      {% for code, lbl in content_categories %}
+      <label style="margin:2px 0"><input type="checkbox" name="cat" value="{{ code }}" {% if code in selected_cats %}checked{% endif %}> {{ lbl }}</label>
+      {% endfor %}
+    </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:2;min-width:200px">
-        <label>Категории Torznab <span class="muted">(через запятую)</span></label>
-        <input type="text" name="torznab_categories" value="{{ dg.torznab_categories }}" placeholder="2000,5000">
+        <label>Доп. категории вручную <span class="muted">(коды Newznab через запятую, необязательно)</span></label>
+        <input type="text" name="torznab_categories_extra" value="{{ extra_cats }}" placeholder="напр. 5080,2040">
       </div>
-      <div style="min-width:150px">
+      <div style="min-width:130px">
         <label>Мин. сидов</label>
         <input type="number" name="min_seeders" value="{{ dg.min_seeders }}" min="0" max="1000">
       </div>
     </div>
-    {% if not omdb_set %}<p class="muted">Рейтинги/постеры: задайте ключ OMDb в <a href="/settings">Настройках</a> (иначе будут только названия).</p>{% endif %}
+    {% if not omdb_set %}<p class="muted">Рейтинги/постеры: задай ключ OMDb в <a href="/settings">Настройках</a> (иначе будут только названия).</p>{% endif %}
 
     <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if dg.enabled %}checked{% endif %}> Автопилот включён (публиковать ежедневно в заданное время)</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>

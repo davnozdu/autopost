@@ -14,6 +14,7 @@ from app import scheduler, services
 from app.config import get_settings
 from app.db.models import (
     BRAVE_FRESHNESS,
+    CONTENT_CATEGORIES,
     DEFAULT_DIGEST_INSTRUCTIONS,
     DEFAULT_MOVIE_INSTRUCTIONS,
     DIGEST_MODES,
@@ -1226,12 +1227,17 @@ def digest_page(request: Request, digest_id: int, msg: str = "") -> HTMLResponse
         ).all()
         config = s.get(AppConfig, 1) or AppConfig(id=1)
     runs = [j for j in scheduler.jobs_info() if j["id"] == f"digest-{digest_id}"]
+    selected = {c.strip() for c in (dg.torznab_categories or "").split(",") if c.strip()}
+    preset = {code for code, _ in CONTENT_CATEGORIES}
+    extra_cats = ",".join(c for c in selected if c not in preset)
     return templates.TemplateResponse(
         request, "digest.html",
         {"dg": dg, "sources": sources, "accounts": _digest_accounts(),
          "languages": LANGUAGES, "freshness": BRAVE_FRESHNESS, "modes": DIGEST_MODES,
-         "runs": runs, "brave_set": bool(config.brave_api_key),
-         "omdb_set": bool(config.omdb_api_key), "msg": msg},
+         "content_categories": CONTENT_CATEGORIES, "selected_cats": selected,
+         "extra_cats": extra_cats, "runs": runs, "brave_set": bool(config.brave_api_key),
+         "omdb_set": bool(config.omdb_api_key),
+         "prowlarr_set": bool(config.prowlarr_url and config.prowlarr_api_key), "msg": msg},
     )
 
 
@@ -1249,7 +1255,8 @@ def save_digest(
     use_brave: bool = Form(False),
     collect_limit: int = Form(12),
     jitter_min: int = Form(0),
-    torznab_categories: str = Form("2000,5000"),
+    cat: list[str] = Form(default=[]),
+    torznab_categories_extra: str = Form(""),
     min_seeders: int = Form(1),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
@@ -1281,7 +1288,14 @@ def save_digest(
         dg.use_brave = use_brave
         dg.collect_limit = max(2, min(40, collect_limit))
         dg.jitter_min = max(0, min(60, jitter_min))
-        dg.torznab_categories = torznab_categories.strip() or "2000,5000"
+        # категории: отмеченные чекбоксы + доп. коды вручную (дедуп, порядок сохраняем)
+        codes = [c.strip() for c in cat if c.strip()]
+        codes += [c.strip() for c in torznab_categories_extra.split(",") if c.strip()]
+        seen_c: list[str] = []
+        for c in codes:
+            if c not in seen_c:
+                seen_c.append(c)
+        dg.torznab_categories = ",".join(seen_c) or "2000,5000"
         dg.min_seeders = max(0, min(1000, min_seeders))
         dg.enabled = enabled
         s.add(dg)
@@ -1384,6 +1398,8 @@ def save_settings(
     giphy_api_key: str = Form(""),
     brave_api_key: str = Form(""),
     omdb_api_key: str = Form(""),
+    prowlarr_url: str = Form(""),
+    prowlarr_api_key: str = Form(""),
     llm_fallback_enabled: bool = Form(False),
     llm_fallback_provider: str = Form("openai"),
     llm_fallback_base_url: str = Form(""),
@@ -1427,10 +1443,29 @@ def save_settings(
             # ключ OMDb пустой = не менять (секрет)
             if omdb_api_key.strip():
                 config.omdb_api_key = omdb_api_key.strip()
+            # Prowlarr: URL сохраняем всегда, ключ — только если прислан (секрет)
+            config.prowlarr_url = prowlarr_url.strip()
+            if prowlarr_api_key.strip():
+                config.prowlarr_api_key = prowlarr_api_key.strip()
         s.add(config)
         s.commit()
     scheduler.reload_jobs()  # перерегистрировать задачу ежедневной сводки
     return _redirect("/settings", "Настройки сохранены")
+
+
+@router.post("/settings/prowlarr-test")
+def settings_prowlarr_test() -> RedirectResponse:
+    from app.digest import prowlarr
+
+    with Session(engine) as s:
+        cfg = s.get(AppConfig, 1) or AppConfig(id=1)
+    idxs = prowlarr.list_indexers(cfg.prowlarr_url, cfg.prowlarr_api_key)
+    if not idxs:
+        msg = "Prowlarr не отвечает или без индексаторов — проверьте URL/ключ (сохраните сначала)"
+    else:
+        on = [i["name"] for i in idxs if i["enable"]]
+        msg = f"Prowlarr ✓ индексаторов: {len(idxs)}, включено: {len(on)} — " + ", ".join(on[:6])
+    return _redirect("/settings", msg[:200])
 
 
 @router.post("/settings/notify-test")

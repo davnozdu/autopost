@@ -38,8 +38,16 @@
     <label style="margin-top:14px">Ключ OMDb API <span class="muted">— рейтинг и постер фильма/сериала для дайджеста «Новинки кино» (бесплатный на omdbapi.com); токены не тратятся{% if config.omdb_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
     <input type="text" name="omdb_api_key" value="" placeholder="{% if config.omdb_api_key %}••••••••{% else %}напр. 1a2b3c4d{% endif %}">
 
+    <label style="margin-top:14px">Prowlarr — адрес <span class="muted">— источники торрентов для дайджеста «Новинки кино» берутся автоматически из его базы (все индексаторы)</span></label>
+    <input type="text" name="prowlarr_url" value="{{ config.prowlarr_url }}" placeholder="http://192.168.0.205:9696">
+    <label>Prowlarr — API-ключ <span class="muted">(Prowlarr → Settings → General → API Key){% if config.prowlarr_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="prowlarr_api_key" value="" placeholder="{% if config.prowlarr_api_key %}••••••••{% else %}ключ Prowlarr{% endif %}">
+
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
+  <hr class="divider">
+  <form method="post" action="/settings/prowlarr-test"><button type="submit">Проверить Prowlarr</button></form>
+  <p class="muted" style="margin-bottom:0">Покажет, сколько индексаторов видит Prowlarr (по сохранённым настройкам).</p>
 </div>
 
 <div class="card">

@@ -53,12 +53,23 @@ def _tokens(text: str) -> set[str]:
 
 
 def _parse_ts(value: str):
+    if not value:
+        return None
+    # RFC 2822 (Torznab «Wed, 01 Jul 2026 …»)
     try:
         dt = parsedate_to_datetime(value)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
     except (TypeError, ValueError, IndexError):
+        pass
+    # ISO 8601 (Prowlarr «2026-07-01T10:10:59Z»)
+    try:
+        dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
         return None
 
 
@@ -200,15 +211,17 @@ def run_digest(digest_id: int) -> dict:
     if not has_acc:
         _finish(digest_id, "нет целевого аккаунта")
         return {"ok": False, "note": "нет целевого аккаунта"}
-    if not sources:
-        _finish(digest_id, "нет источников")
-        return {"ok": False, "note": "нет источников"}
 
     language = (dg.language or acc_lang or config.language or "ru").strip()
 
-    # Ветка «Новинки кино» (торренты через Torznab) — отдельный поток.
+    # Ветка «Новинки кино»: источники берутся автоматически из Prowlarr (или, как
+    # запас, из ручных Torznab-URL). Проверку «нет источников» здесь не делаем.
     if dg.mode == "movies":
         return _run_movies_digest(dg, sources, config, language)
+
+    if not sources:
+        _finish(digest_id, "нет источников")
+        return {"ok": False, "note": "нет источников"}
 
     # 1) пул из RSS (без LLM)
     items = _collect_pool(sources)
@@ -322,15 +335,20 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         _finish(dg.id, "movies-дайджест доступен только для Telegram")
         return {"ok": False, "note": "movies только для Telegram"}
 
-    from app.digest import ratings, torrentfile, torznab
+    from app.digest import prowlarr, ratings, torrentfile, torznab
 
-    # 1) собрать релизы из всех Torznab-эндпоинтов (без LLM)
+    # 1) источники АВТОМАТИЧЕСКИ из Prowlarr (агрегирует все индексаторы). Запасной
+    #    путь — ручные Torznab-URL в источниках, если Prowlarr не задан.
     raw: list[dict] = []
-    for src in sources:
-        raw += torznab.fetch(src.url, dg.torznab_categories, limit=100)
+    if config.prowlarr_url.strip() and config.prowlarr_api_key.strip():
+        raw = prowlarr.search(config.prowlarr_url, config.prowlarr_api_key,
+                              dg.torznab_categories, limit=150)
     if not raw:
-        _finish(dg.id, "Torznab: пусто или эндпоинт недоступен")
-        return {"ok": False, "note": "Torznab: пусто/недоступен"}
+        for src in sources:
+            raw += torznab.fetch(src.url, dg.torznab_categories, limit=100)
+    if not raw:
+        _finish(dg.id, "Prowlarr/Torznab: пусто или недоступно (проверьте URL/ключ и категории)")
+        return {"ok": False, "note": "Prowlarr/Torznab: пусто/недоступно"}
 
     # 2) свернуть дубли, оставить «живые» раздачи (magnet добудем ниже)
     from app.digest import release

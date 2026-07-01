@@ -128,6 +128,10 @@ class AppConfig(SQLModel, table=True):
     # OMDb API: рейтинг + постер фильма/сериала для movies-дайджеста (бесплатный
     # ключ на omdbapi.com). Токены LLM не тратятся.
     omdb_api_key: str = ""
+    # Prowlarr: индексаторы торрентов берутся АВТОМАТИЧЕСКИ из его базы (search-API
+    # агрегирует все трекеры). Задаётся один раз; movies-дайджест ходит сюда.
+    prowlarr_url: str = ""        # напр. http://192.168.0.205:9696
+    prowlarr_api_key: str = ""    # Settings → General → API Key в Prowlarr
 
 
 class LLMCache(SQLModel, table=True):
@@ -370,6 +374,19 @@ BRAVE_FRESHNESS = [("pd", "За сутки"), ("pw", "За неделю"), ("pm"
 
 # Режимы дайджеста (код → метка).
 DIGEST_MODES = [("news", "Новости"), ("movies", "Новинки кино (торренты)")]
+
+# Типы контента для movies-дайджеста (код Newznab → метка). Пользователь просто
+# отмечает нужное, коды подставляются в запрос к Prowlarr автоматически.
+CONTENT_CATEGORIES = [
+    ("2000", "Фильмы"),
+    ("5000", "Сериалы"),
+    ("5070", "Аниме"),
+    ("3000", "Музыка"),
+    ("4000", "Игры (PC)"),
+    ("1000", "Игры (консоли)"),
+    ("7000", "Книги"),
+    ("8000", "Другое"),
+]
 
 
 class Digest(SQLModel, table=True):
