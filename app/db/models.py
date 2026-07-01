@@ -408,6 +408,20 @@ class DigestSource(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class DigestSeen(SQLModel, table=True):
+    """Уже опубликованные позиции дайджеста — защита от повторов между днями.
+
+    item_key = нормализованный «название|год|сезон» (или infohash). Перед выдачей
+    новинок исключаем то, что уже было; после публикации — записываем сюда.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    digest_id: int = Field(index=True)
+    item_key: str = Field(index=True)
+    title: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
 class Article(SQLModel, table=True):
     """Подготовленная статья: текст, расписание и статус."""
 

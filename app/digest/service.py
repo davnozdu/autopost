@@ -12,7 +12,7 @@
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 from sqlmodel import Session, select
@@ -22,6 +22,7 @@ from app.db.models import (
     DEFAULT_MOVIE_INSTRUCTIONS,
     AppConfig,
     Digest,
+    DigestSeen,
     DigestSource,
     IGAccount,
     IGPost,
@@ -271,10 +272,39 @@ def _english_title(title: str) -> str:
     return (title or "").strip()
 
 
+def _seen_keys(digest_id: int) -> set[str]:
+    """Ключи уже опубликованных позиций дайджеста (для исключения повторов)."""
+    with Session(engine) as s:
+        rows = s.exec(
+            select(DigestSeen.item_key).where(DigestSeen.digest_id == digest_id)
+        ).all()
+    return set(rows)
+
+
+def _record_seen(digest_id: int, items: list[dict]) -> None:
+    """Запомнить опубликованные позиции + подчистить совсем старые (>180 дней)."""
+    from app.digest import release
+    with Session(engine) as s:
+        for it in items:
+            key = release.norm_key(it.get("title", ""), it.get("year", ""),
+                                   it.get("season", ""))
+            s.add(DigestSeen(digest_id=digest_id, item_key=key,
+                             title=(it.get("title") or "")[:200]))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=180)
+        for old in s.exec(
+            select(DigestSeen).where(DigestSeen.digest_id == digest_id,
+                                     DigestSeen.created_at < cutoff)
+        ).all():
+            s.delete(old)
+        s.commit()
+
+
 def _movie_magnet_comment(items: list[dict]) -> str:
-    """Первый комментарий: magnet (плейн-текст, Telegram делает тапабельным) или,
-    если magnet нет, ссылка на страницу трекера. Download-ссылку Prowlarr НЕ
-    публикуем — в ней apikey и локальный адрес сервера."""
+    """Первый комментарий: список «Название (год) — ссылка», по одному на строку.
+
+    Ссылка — magnet (плейн-текст, Telegram делает тапабельным); если magnet нет —
+    страница трекера. Download-ссылку Prowlarr НЕ публикуем (в ней apikey и адрес
+    сервера)."""
     lines = []
     for it in items:
         icon = "📺" if (it.get("is_series") or it.get("omdb_type") == "series") else "🎬"
@@ -282,7 +312,7 @@ def _movie_magnet_comment(items: list[dict]) -> str:
         year = f" ({it['year']})" if it.get("year") else ""
         link = it.get("magnet") or it.get("page_url") or ""
         if link:
-            lines.append(f"{icon} {title}{year}\n{link}")
+            lines.append(f"{icon} {title}{year} — {link}")
     return "\n\n".join(lines)
 
 
@@ -303,15 +333,28 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         return {"ok": False, "note": "Torznab: пусто/недоступен"}
 
     # 2) свернуть дубли, оставить «живые» раздачи (magnet добудем ниже)
+    from app.digest import release
     items = torznab.dedup_best(raw)
     items = [x for x in items if x.get("seeders", 0) >= max(0, dg.min_seeders)]
     if not items:
         _finish(dg.id, "нет раздач с нужным числом сидов")
         return {"ok": False, "note": "нет подходящих раздач"}
 
-    # 3) ранжирование по сидам (recent-листинг уже даёт свежесть), топ 2–5
-    items.sort(key=lambda x: x.get("seeders", 0), reverse=True)
-    top = items[: min(max(dg.collect_limit, 2), 5)]
+    # 3) ИСКЛЮЧИТЬ уже опубликованное (защита от повторов между днями)
+    seen = _seen_keys(dg.id)
+    fresh = [x for x in items
+             if release.norm_key(x.get("title", ""), x.get("year", ""),
+                                  x.get("season", "")) not in seen]
+    if not fresh:
+        _finish(dg.id, "все свежие релизы уже публиковались — повторов не будет")
+        return {"ok": False, "note": "новых релизов нет (все уже были)"}
+
+    # 4) ранжирование по СВЕЖЕСТИ (новые загрузки сверху), сиды — вторичный ключ.
+    #    Это «новинки», а не старый каталог по сидам.
+    _old = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    fresh.sort(key=lambda x: (_parse_ts(x.get("pubdate", "")) or _old,
+                              x.get("seeders", 0)), reverse=True)
+    top = fresh[: min(max(dg.collect_limit, 2), 5)]
 
     # 4) для выбранных: если magnet нет — добыть из .torrent (через download-ссылку
     #    Prowlarr); английское название для OMDb. Только 2–5 штук → дёшево.
@@ -355,6 +398,9 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         ok, note = True, f"опубликовано в Telegram ({len(top)} шт., magnet в комментарии)"
     except TGError as exc:
         ok, note = False, str(exc)[:200]
+
+    if ok:
+        _record_seen(dg.id, top)  # запомнить, чтобы завтра не повторять
 
     _finish(dg.id, ("опубликован: " if ok else "ошибка: ") + note)
     if not ok:
