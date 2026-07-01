@@ -125,9 +125,11 @@ class AppConfig(SQLModel, table=True):
     llm_fallback_base_url: str = ""          # пусто → base_url пресета
     llm_fallback_key: str = ""               # ключ резервного провайдера (секрет)
     llm_fallback_model: str = ""             # пусто → default_model пресета
-    # OMDb API: рейтинг + постер фильма/сериала для movies-дайджеста (бесплатный
-    # ключ на omdbapi.com). Токены LLM не тратятся.
-    omdb_api_key: str = ""
+    # Рейтинг+постер для movies-дайджеста (токены LLM не тратятся). TMDb —
+    # основной (многоязычный, находит русские и новые фильмы, есть постеры);
+    # OMDb — запасной (англоязычный). Оба ключа бесплатные.
+    tmdb_api_key: str = ""        # themoviedb.org (API Read Access / v3 key)
+    omdb_api_key: str = ""        # omdbapi.com
     # Prowlarr: индексаторы торрентов берутся АВТОМАТИЧЕСКИ из его базы (search-API
     # агрегирует все трекеры). Задаётся один раз; movies-дайджест ходит сюда.
     prowlarr_url: str = ""        # напр. http://192.168.0.205:9696
@@ -408,6 +410,8 @@ class Digest(SQLModel, table=True):
     # movies-режим (Torznab: Jackett/Prowlarr):
     torznab_categories: str = "2000,5000"  # Newznab-категории (2000 кино, 5000 сериалы)
     min_seeders: int = 1          # минимум сидов у релиза (фильтр «живых» раздач)
+    max_age_years: int = 2        # брать только релизы не старше N лет по ГОДУ ВЫПУСКА
+                                  # (0 = любой год; фильтрует старый каталог, залитый сегодня)
     enabled: bool = True
     last_run_at: datetime | None = None
     last_note: str = ""

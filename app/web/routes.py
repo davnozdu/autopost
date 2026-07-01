@@ -1236,7 +1236,7 @@ def digest_page(request: Request, digest_id: int, msg: str = "") -> HTMLResponse
          "languages": LANGUAGES, "freshness": BRAVE_FRESHNESS, "modes": DIGEST_MODES,
          "content_categories": CONTENT_CATEGORIES, "selected_cats": selected,
          "extra_cats": extra_cats, "runs": runs, "brave_set": bool(config.brave_api_key),
-         "omdb_set": bool(config.omdb_api_key),
+         "omdb_set": bool(config.tmdb_api_key or config.omdb_api_key),
          "prowlarr_set": bool(config.prowlarr_url and config.prowlarr_api_key), "msg": msg},
     )
 
@@ -1258,6 +1258,7 @@ def save_digest(
     cat: list[str] = Form(default=[]),
     torznab_categories_extra: str = Form(""),
     min_seeders: int = Form(1),
+    max_age_years: int = Form(2),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
     allowed_l = {c for c, _ in LANGUAGES}
@@ -1297,6 +1298,7 @@ def save_digest(
                 seen_c.append(c)
         dg.torznab_categories = ",".join(seen_c) or "2000,5000"
         dg.min_seeders = max(0, min(1000, min_seeders))
+        dg.max_age_years = max(0, min(50, max_age_years))
         dg.enabled = enabled
         s.add(dg)
         s.commit()
@@ -1399,6 +1401,7 @@ def save_settings(
     giphy_api_key: str = Form(""),
     brave_api_key: str = Form(""),
     omdb_api_key: str = Form(""),
+    tmdb_api_key: str = Form(""),
     prowlarr_url: str = Form(""),
     prowlarr_api_key: str = Form(""),
     llm_fallback_enabled: bool = Form(False),
@@ -1441,9 +1444,11 @@ def save_settings(
             # ключ Brave Search пустой = не менять (секрет)
             if brave_api_key.strip():
                 config.brave_api_key = brave_api_key.strip()
-            # ключ OMDb пустой = не менять (секрет)
+            # ключи OMDb/TMDb пустые = не менять (секрет)
             if omdb_api_key.strip():
                 config.omdb_api_key = omdb_api_key.strip()
+            if tmdb_api_key.strip():
+                config.tmdb_api_key = tmdb_api_key.strip()
             # Prowlarr: URL сохраняем всегда, ключ — только если прислан (секрет)
             config.prowlarr_url = prowlarr_url.strip()
             if prowlarr_api_key.strip():

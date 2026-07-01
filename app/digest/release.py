@@ -6,7 +6,7 @@
 
 import re
 
-_YEAR = re.compile(r"[.\s(\[]((?:19|20)\d\d)(?:[.\s)\]]|$)")
+_YEAR = re.compile(r"[.\s(\[]((?:19|20)\d\d)(?:[.,\s)\]]|$)")
 _SERIES = re.compile(r"\bS(\d{1,2})(?:[.\s]?E\d{1,3})?\b|\bСезон\b|\bSeason\b", re.I)
 # технические теги качества/кодеков/групп — всё, что после них, отбрасываем
 _TAGS = re.compile(

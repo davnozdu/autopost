@@ -106,12 +106,17 @@
         <label>Доп. категории вручную <span class="muted">(коды Newznab через запятую, необязательно)</span></label>
         <input type="text" name="torznab_categories_extra" value="{{ extra_cats }}" placeholder="напр. 5080,2040">
       </div>
-      <div style="min-width:130px">
+      <div style="min-width:120px">
         <label>Мин. сидов</label>
         <input type="number" name="min_seeders" value="{{ dg.min_seeders }}" min="0" max="1000">
       </div>
+      <div style="min-width:150px">
+        <label>Не старше, лет <span class="muted">(по году выпуска; 0 = любой)</span></label>
+        <input type="number" name="max_age_years" value="{{ dg.max_age_years }}" min="0" max="50">
+      </div>
     </div>
-    {% if not omdb_set %}<p class="muted">Рейтинги/постеры: задай ключ OMDb в <a href="/settings">Настройках</a> (иначе будут только названия).</p>{% endif %}
+    <p class="muted">«Не старше N лет» отсекает старый каталог, который трекер залил сегодня (напр. фильм 2015 г.). 2 = только релизы последних ~2 лет.</p>
+    {% if not omdb_set %}<p class="muted">Рейтинги и постеры: задай ключ <b>TMDb</b> (и/или OMDb) в <a href="/settings">Настройках</a> — иначе поста без картинки и рейтинга.</p>{% endif %}
 
     <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if dg.enabled %}checked{% endif %}> Автопилот включён (публиковать ежедневно в заданное время)</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>

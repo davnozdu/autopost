@@ -35,7 +35,10 @@
     <label style="margin-top:14px">Ключ Brave Search API <span class="muted">— для ранжирования новостей дайджеста по актуальности (бесплатный на api.search.brave.com); токены LLM при этом не тратятся{% if config.brave_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
     <input type="text" name="brave_api_key" value="" placeholder="{% if config.brave_api_key %}••••••••{% else %}BSA...{% endif %}">
 
-    <label style="margin-top:14px">Ключ OMDb API <span class="muted">— рейтинг и постер фильма/сериала для дайджеста «Новинки кино» (бесплатный на omdbapi.com); токены не тратятся{% if config.omdb_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <label style="margin-top:14px">Ключ TMDb API <span class="muted">— рейтинг и <b>постер</b> для «Новинки кино»; основной источник (многоязычный, находит русские и новые фильмы). Бесплатный на themoviedb.org (Settings → API){% if config.tmdb_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
+    <input type="text" name="tmdb_api_key" value="" placeholder="{% if config.tmdb_api_key %}••••••••{% else %}TMDb API key (v3){% endif %}">
+
+    <label style="margin-top:14px">Ключ OMDb API <span class="muted">— запасной источник рейтинга/постера (англоязычный); бесплатный на omdbapi.com{% if config.omdb_api_key %} · задан ✓, оставьте пустым, чтобы не менять{% endif %}</span></label>
     <input type="text" name="omdb_api_key" value="" placeholder="{% if config.omdb_api_key %}••••••••{% else %}напр. 1a2b3c4d{% endif %}">
 
     <label style="margin-top:14px">Prowlarr — адрес <span class="muted">— источники торрентов для дайджеста «Новинки кино» берутся автоматически из его базы (все индексаторы)</span></label>

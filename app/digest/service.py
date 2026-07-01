@@ -354,9 +354,23 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
     from app.digest import release
     items = torznab.dedup_best(raw)
     items = [x for x in items if x.get("seeders", 0) >= max(0, dg.min_seeders)]
+    # фильтр по ГОДУ ВЫПУСКА: отсекаем старый каталог, залитый сегодня (год
+    # известен и старше порога). Год неизвестен → не трогаем.
+    if dg.max_age_years and dg.max_age_years > 0:
+        cutoff = datetime.now(timezone.utc).year - dg.max_age_years
+
+        def _recent(x):
+            y = x.get("year")
+            if not y:
+                return True
+            try:
+                return int(y) >= cutoff
+            except (TypeError, ValueError):
+                return True
+        items = [x for x in items if _recent(x)]
     if not items:
-        _finish(dg.id, "нет раздач с нужным числом сидов")
-        return {"ok": False, "note": "нет подходящих раздач"}
+        _finish(dg.id, "нет свежих релизов (проверьте категории/год/сиды)")
+        return {"ok": False, "note": "нет подходящих релизов"}
 
     # 3) ИСКЛЮЧИТЬ уже опубликованное (защита от повторов между днями)
     seen = _seen_keys(dg.id)
@@ -395,9 +409,9 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
             it["magnet"] = torrentfile.magnet_from_url(it["download_url"], name=nm) or ""
         it["en_title"] = _english_title(it.get("title", ""))
 
-    # 5) рейтинг + постер (OMDb, без токенов)
+    # 5) рейтинг + постер (TMDb → OMDb, без токенов)
     for it in top:
-        ratings.enrich(it, config.omdb_api_key)
+        ratings.enrich(it, config.omdb_api_key, config.tmdb_api_key)
 
     # 6) ОДИН вызов LLM → подпись подборки
     instructions = (dg.instructions or "").strip() or DEFAULT_MOVIE_INSTRUCTIONS
