@@ -24,6 +24,7 @@ from app.llm.prompt import (
     build_ig_prompt,
     build_select_prompt,
     build_shorten_prompt,
+    parse_gif_query,
     parse_ig_parts,
     parse_selection,
 )
@@ -217,6 +218,7 @@ def collect_account(account_id: int) -> dict:
                 res = client.chat(system, user, json_mode=True, temperature=0.8,
                                   model=(config.llm_model or None))
                 body, hashtags = parse_ig_parts(res.text, fallback_text=summary)
+                gif_query = parse_gif_query(res.text)  # тем же вызовом, без доп. токенов
             except LLMError:
                 continue
             caption = _fit_caption(client, config, language, body, link_url, hashtags)
@@ -227,6 +229,7 @@ def collect_account(account_id: int) -> dict:
                 source_title=title,
                 image_url=clean_image_url(image),
                 caption=caption,
+                gif_query=gif_query,
                 link_url=link_url,
                 status="scheduled",
             ))
@@ -303,8 +306,13 @@ def _story_gif_ids(acc: IGAccount, post: IGPost) -> list[str]:
     if not api_key.strip():
         return []
     from app.instagram import giphy
-    hashtags = re.findall(r"#(\w+)", post.caption or "")
-    query = giphy.build_query(hashtags, post.source_title or "")
+    # 1) ключевое слово от LLM (по смыслу поста, тем же вызовом) — приоритет;
+    # 2) иначе латинский хэштег/слово из заголовка; 3) иначе тема аккаунта.
+    query = (getattr(post, "gif_query", "") or "").strip()
+    if not query:
+        hashtags = re.findall(r"#(\w+)", post.caption or "")
+        query = giphy.build_query(hashtags, post.source_title or "",
+                                  fallback=getattr(acc, "gif_theme", "") or "")
     return giphy.search_sticker_ids(api_key, query, lang=acc.language or "en")
 
 

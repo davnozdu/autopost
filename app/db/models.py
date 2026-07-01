@@ -176,6 +176,7 @@ class IGAccount(SQLModel, table=True):
     last_source_id: int = 0      # курсор ротации источников (для равномерного чередования)
     story_music: bool = True     # добавлять музыку из библиотеки Instagram к сториз
     story_gif: bool = True       # добавлять анимированный GIF-стикер по теме (Giphy)
+    gif_theme: str = ""          # запасная тема GIF (напр. «cinema movie»), если LLM/пост не дали
     enabled: bool = True
     # Состояние входа (для админки): "", ok, challenge, error
     login_status: str = ""
@@ -207,6 +208,7 @@ class IGPost(SQLModel, table=True):
     kind: str = ""               # post | story — назначается при публикации
     image_url: str | None = None
     caption: str = ""            # готовая подпись (с хэштегами/ссылкой)
+    gif_query: str = ""          # англ. ключевое слово для GIF-стикера по теме поста (от LLM)
     link_url: str = ""           # ссылка на сайт (для стикера сториз / текста поста)
     status: str = "scheduled"    # draft | scheduled | published | failed
     publish_at: datetime | None = None

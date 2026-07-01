@@ -37,8 +37,10 @@ def _ascii_terms(text: str) -> list[str]:
     return out
 
 
-def build_query(hashtags: list[str] | None, title: str = "") -> str:
-    """Запрос к Giphy «по теме»: латинский хэштег/термин, иначе — из заголовка."""
+def build_query(hashtags: list[str] | None, title: str = "", fallback: str = "") -> str:
+    """Запрос к Giphy «по теме»: латинский хэштег/термин, иначе — из заголовка,
+    иначе — из заданной темы аккаунта (`fallback`, напр. «cinema movie»), а в
+    последнюю очередь — общий запасной список."""
     for t in hashtags or []:
         t = (t or "").lstrip("#").strip().lower()
         if t and re.fullmatch(r"[a-z0-9]{3,}", t) and t not in _STOP:
@@ -46,6 +48,9 @@ def build_query(hashtags: list[str] | None, title: str = "") -> str:
     terms = _ascii_terms(title)
     if terms:
         return terms[0]
+    theme_terms = _ascii_terms(fallback)
+    if theme_terms:
+        return random.choice(theme_terms)
     return random.choice(_FALLBACK)
 
 

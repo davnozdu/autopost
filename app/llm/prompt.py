@@ -187,9 +187,12 @@ def build_ig_prompt(config: AppConfig, news: dict, language: str | None = None) 
         rules.append(config.llm_instructions.strip())
     rules.append(
         "Vrať POUZE validní JSON bez dalšího textu, přesně v tomto tvaru:\n"
-        '{"caption": "...", "hashtags": ["...", "..."]}\n'
+        '{"caption": "...", "hashtags": ["...", "..."], "gif_query": "..."}\n'
         "- caption: text popisku bez hashtagů;\n"
-        "- hashtags: 5–12 relevantních hashtagů bez znaku #, malými písmeny."
+        "- hashtags: 5–12 relevantních hashtagů bez znaku #, malými písmeny;\n"
+        "- gif_query: JEDNO výstižné ANGLICKÉ klíčové slovo pro vyhledání tematické "
+        "animované GIF nálepky k tématu příspěvku (např. horror, comedy, football, "
+        "cinema, premiere). Vždy anglicky, malými písmeny, bez #."
     )
     system = "Jsi zkušený social media manažer. " + " ".join(rules)
     user = (
@@ -322,6 +325,15 @@ def parse_ig_parts(raw: str, fallback_text: str = "") -> tuple[str, list[str]]:
             if t:
                 clean.append(t)
     return caption, clean
+
+
+def parse_gif_query(raw: str) -> str:
+    """Достать англ. ключевое слово для GIF из JSON-ответа модели (или '')."""
+    data = _extract_json(raw) or {}
+    q = str(data.get("gif_query") or "").strip().lstrip("#").lower()
+    # оставляем ОДНО латинское слово (лучше всего ищется в Giphy)
+    m = re.search(r"[a-z][a-z0-9]{2,}", q)
+    return m.group(0) if m else ""
 
 
 def build_shorten_prompt(text: str, max_chars: int, language: str) -> tuple[str, str]:

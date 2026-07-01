@@ -474,6 +474,7 @@ def ig_save_account(
     collect_limit: int = Form(8),
     story_music: bool = Form(False),
     story_gif: bool = Form(False),
+    gif_theme: str = Form(""),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
     allowed_l = {c for c, _ in LANGUAGES}
@@ -483,6 +484,7 @@ def ig_save_account(
             return _redirect("/instagram", "Аккаунт не найден")
         acc.story_music = story_music
         acc.story_gif = story_gif
+        acc.gif_theme = gif_theme.strip()
         acc.name = name.strip()
         acc.username = username.strip()
         if password.strip():

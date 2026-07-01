@@ -50,6 +50,8 @@
 
     <label style="margin-top:12px"><input type="checkbox" name="story_music" {% if acc.story_music %}checked{% endif %}> Добавлять музыку из библиотеки Instagram к сториз</label>
     <label><input type="checkbox" name="story_gif" {% if acc.story_gif %}checked{% endif %}> Добавлять анимированный GIF-стикер по теме к сториз (нужен ключ Giphy в Настройках)</label>
+    <label>Тема GIF (запасная) <span class="muted">— англ. слова, если LLM/пост не дали ключевого слова; для кино напр. «cinema movie film trailer»</span></label>
+    <input type="text" name="gif_theme" value="{{ acc.gif_theme }}" placeholder="cinema movie film">
     <label><input type="checkbox" name="enabled" {% if acc.enabled %}checked{% endif %}> Автопилот включён</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
