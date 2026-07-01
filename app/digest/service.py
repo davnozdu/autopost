@@ -316,43 +316,51 @@ def _record_seen(digest_id: int, items: list[dict]) -> None:
 def _build_movie_caption(items: list[dict], intro: str, hashtags: list[str],
                          max_chars: int = 1024) -> str:
     """Красиво оформленная HTML-подпись: вступление + список фильмов (жирное
-    название, год, ⭐рейтинг, тип, жанр, описание) + строка про комментарий."""
-    def build(with_overview: bool) -> str:
-        blocks = []
-        if intro.strip():
-            blocks.append(_html.escape(intro.strip()))
-        for i, it in enumerate(items, 1):
-            title = _html.escape(it.get("omdb_title") or it.get("title") or it.get("raw_title", ""))
-            year = f" ({it['year']})" if it.get("year") else ""
-            meta = []
-            if it.get("rating"):
-                meta.append(f"⭐ {_html.escape(str(it['rating']))} {it.get('rating_src', '')}".strip())
-            if it.get("is_series") or it.get("omdb_type") == "series":
-                meta.append("сериал")
-            if it.get("genre"):
-                meta.append(_html.escape(str(it["genre"])))
-            block = f"{i}. <b>{title}</b>{year}"
-            if meta:
-                block += "\n" + " · ".join(meta)
-            ov = (it.get("overview") or "").strip()
-            if with_overview and ov:
-                ov = ov.split(". ")[0].strip()
-                if len(ov) > 160:
-                    ov = ov[:157].rstrip() + "…"
-                block += f"\n<i>{_html.escape(ov)}</i>"
-            blocks.append(block)
-        blocks.append("⬇️ Ссылки на скачивание — в первом комментарии")
-        tags = " ".join("#" + t.lstrip("#") for t in hashtags[:6] if t.strip())
-        if tags:
-            blocks.append(tags)
-        return "\n\n".join(blocks)
+    название, год, ⭐рейтинг, тип, жанр, описание) + строка про комментарий.
 
-    cap = build(True)
-    if len(cap) > max_chars:      # без описаний — чтобы не рвать HTML-теги обрезкой
-        cap = build(False)
-    if len(cap) > max_chars:
-        cap = cap[:max_chars]
-    return cap
+    Описания НЕ выкидываются целиком при нехватке места (лимит подписи к фото —
+    1024), а адаптивно укорачиваются, чтобы влезли короткими."""
+    intro = (intro or "").strip()
+    footer = "⬇️ Ссылки на скачивание — в первом комментарии"
+    tags = " ".join("#" + t.lstrip("#") for t in hashtags[:6] if t.strip())
+
+    heads = []  # блок каждого фильма БЕЗ описания
+    for i, it in enumerate(items, 1):
+        title = _html.escape(it.get("omdb_title") or it.get("title") or it.get("raw_title", ""))
+        year = f" ({it['year']})" if it.get("year") else ""
+        meta = []
+        if it.get("rating"):
+            meta.append(f"⭐ {_html.escape(str(it['rating']))} {it.get('rating_src', '')}".strip())
+        if it.get("is_series") or it.get("omdb_type") == "series":
+            meta.append("сериал")
+        if it.get("genre"):
+            meta.append(_html.escape(str(it["genre"])))
+        h = f"{i}. <b>{title}</b>{year}"
+        if meta:
+            h += "\n" + " · ".join(meta)
+        heads.append(h)
+
+    fixed = ([_html.escape(intro)] if intro else []) + heads + [footer] + ([tags] if tags else [])
+    base_len = len("\n\n".join(fixed))
+    room = max_chars - base_len - len(items) * 6      # запас на теги <i></i> и переводы строк
+    per = room // max(1, len(items)) if room > 0 else 0
+
+    blocks = [_html.escape(intro)] if intro else []
+    for i, it in enumerate(items, 1):
+        b = heads[i - 1]
+        ov = (it.get("overview") or "").strip()
+        if ov and per > 24:
+            ov = ov.split(". ")[0].strip().rstrip(".")
+            limit = min(200, per - 2)
+            if len(ov) > limit:
+                ov = ov[:limit].rstrip() + "…"
+            b += f"\n<i>{_html.escape(ov)}</i>"
+        blocks.append(b)
+    blocks.append(footer)
+    if tags:
+        blocks.append(tags)
+    cap = "\n\n".join(blocks)
+    return cap[:max_chars] if len(cap) > max_chars else cap
 
 
 def _movie_magnet_comment(items: list[dict]) -> str:
@@ -488,8 +496,12 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         else:
             client.send_post(caption, posters[0] if posters else None, comment,
                              comment_mode="", caption_mode="HTML")
-        pics = f", постеров {len(posters)}" if posters else ""
-        ok, note = True, f"опубликовано в Telegram ({len(top)} шт.{pics}, magnet в комментарии)"
+        rats = sum(1 for it in top if it.get("rating"))
+        links = sum(1 for it in top if it.get("magnet") or it.get("page_url"))
+        ok, note = True, (f"опубликовано в Telegram ({len(top)} шт.: постеров {len(posters)}, "
+                          f"рейтингов {rats}, ссылок в комментарии {links})")
+        if not posters and not rats:
+            note += " · нет постеров/рейтингов — задайте ключ TMDb в Настройках"
     except TGError as exc:
         ok, note = False, str(exc)[:200]
 
