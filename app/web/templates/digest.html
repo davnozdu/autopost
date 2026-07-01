@@ -70,7 +70,7 @@
 
     <hr class="divider">
     <h4 style="margin:4px 0 2px">Ранжирование по актуальности (Brave Search)</h4>
-    <p class="muted" style="margin-top:2px">Brave сортирует собранный пул по свежести/важности темы — без расхода токенов LLM. LLM вызывается один раз, уже на готовый итоговый пост.</p>
+    <p class="muted" style="margin-top:2px">Brave сортирует пул по актуальности темы — без расхода токенов LLM (1 запрос). В режиме «Новости» — по свежести/важности. В режиме «Новинки кино» — поднимает релизы, которые сейчас на слуху (премьеры, о которых пишут), и опускает старые ре-апы; тема, напр. «новые фильмы сериалы премьеры 2026».</p>
     <label><input type="checkbox" name="use_brave" {% if dg.use_brave %}checked{% endif %}> Использовать Brave для ранжирования</label>
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <div style="flex:2;min-width:200px">

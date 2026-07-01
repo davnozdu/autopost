@@ -349,11 +349,24 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         _finish(dg.id, "все свежие релизы уже публиковались — повторов не будет")
         return {"ok": False, "note": "новых релизов нет (все уже были)"}
 
-    # 4) ранжирование по СВЕЖЕСТИ (новые загрузки сверху), сиды — вторичный ключ.
-    #    Это «новинки», а не старый каталог по сидам.
+    # 4) ранжирование. База — СВЕЖЕСТЬ (новые загрузки сверху), сиды — вторичны.
+    #    Опц. Brave (1 запрос, без токенов): поднимаем релизы, которые сейчас «на
+    #    слуху» (премьеры, о которых пишут), и опускаем старые ре-апы с сегодняшней
+    #    датой. Brave НЕ добавляет фильмов — только меняет порядок свежих раздач.
+    brave_words: set[str] = set()
+    if dg.use_brave and config.brave_api_key.strip() and dg.brave_query.strip():
+        for blob in brave.search_titles(config.brave_api_key, dg.brave_query,
+                                        freshness=dg.brave_freshness, lang=language):
+            brave_words |= _tokens(blob)
     _old = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    fresh.sort(key=lambda x: (_parse_ts(x.get("pubdate", "")) or _old,
-                              x.get("seeders", 0)), reverse=True)
+
+    def _movie_score(x):
+        words = _tokens(f"{x.get('title', '')} {_english_title(x.get('title', ''))} "
+                        f"{x.get('year', '')}")
+        rel = len(words & brave_words)  # 0, если Brave выключен/пусто → чистая свежесть
+        return (rel, _parse_ts(x.get("pubdate", "")) or _old, x.get("seeders", 0))
+
+    fresh.sort(key=_movie_score, reverse=True)
     top = fresh[: min(max(dg.collect_limit, 2), 5)]
 
     # 4) для выбранных: если magnet нет — добыть из .torrent (через download-ссылку
