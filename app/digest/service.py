@@ -19,6 +19,7 @@ from sqlmodel import Session, select
 
 from app.config import get_settings  # noqa: F401  (единообразие импорта)
 from app.db.models import (
+    DEFAULT_MOVIE_INSTRUCTIONS,
     AppConfig,
     Digest,
     DigestSource,
@@ -32,7 +33,7 @@ from app.db.models import (
 from app.db.session import engine
 from app.digest import brave
 from app.llm.client import LLMClient, LLMError
-from app.llm.prompt import build_digest_prompt, parse_ig_parts
+from app.llm.prompt import build_digest_prompt, build_movie_digest_prompt, parse_ig_parts
 from app.scraper.rss import peek_feed
 from app.util import clean_image_url
 
@@ -204,6 +205,10 @@ def run_digest(digest_id: int) -> dict:
 
     language = (dg.language or acc_lang or config.language or "ru").strip()
 
+    # Ветка «Новинки кино» (торренты через Torznab) — отдельный поток.
+    if dg.mode == "movies":
+        return _run_movies_digest(dg, sources, config, language)
+
     # 1) пул из RSS (без LLM)
     items = _collect_pool(sources)
     if not items:
@@ -256,3 +261,90 @@ def run_digest(digest_id: int) -> dict:
         except Exception:
             pass
     return {"ok": ok, "note": note, "items": len(top), "brave": len(brave_blobs)}
+
+
+# ── Movies-дайджест (торренты через Torznab) ──────────────────────────
+def _movie_magnet_comment(items: list[dict]) -> str:
+    """Первый комментарий с magnet-ссылками (плейн-текст: Telegram делает их тапабельными)."""
+    lines = []
+    for it in items:
+        icon = "📺" if (it.get("is_series") or it.get("omdb_type") == "series") else "🎬"
+        title = it.get("omdb_title") or it.get("title") or it.get("raw_title", "")
+        year = f" ({it['year']})" if it.get("year") else ""
+        magnet = it.get("magnet", "")
+        if magnet:
+            lines.append(f"{icon} {title}{year}\n{magnet}")
+    return "\n\n".join(lines)
+
+
+def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: str) -> dict:
+    """Подборка новинок с торрентов → пост в TG + magnet-ссылки первым комментарием."""
+    if dg.platform != "tg":
+        _finish(dg.id, "movies-дайджест доступен только для Telegram")
+        return {"ok": False, "note": "movies только для Telegram"}
+
+    from app.digest import ratings, torznab
+
+    # 1) собрать релизы из всех Torznab-эндпоинтов (без LLM)
+    raw: list[dict] = []
+    for src in sources:
+        raw += torznab.fetch(src.url, dg.torznab_categories, limit=100)
+    if not raw:
+        _finish(dg.id, "Torznab: пусто или эндпоинт недоступен")
+        return {"ok": False, "note": "Torznab: пусто/недоступен"}
+
+    # 2) свернуть дубли, оставить «живые» раздачи с magnet
+    items = torznab.dedup_best(raw)
+    items = [x for x in items
+             if x.get("seeders", 0) >= max(0, dg.min_seeders) and x.get("magnet")]
+    if not items:
+        _finish(dg.id, "нет раздач с magnet и нужным числом сидов")
+        return {"ok": False, "note": "нет подходящих раздач"}
+
+    # 3) ранжирование по сидам (recent-листинг уже даёт свежесть), топ 2–5
+    items.sort(key=lambda x: x.get("seeders", 0), reverse=True)
+    top = items[: min(max(dg.collect_limit, 2), 5)]
+
+    # 4) рейтинг + постер (OMDb, без токенов)
+    for it in top:
+        ratings.enrich(it, config.omdb_api_key)
+
+    # 5) ОДИН вызов LLM → подпись подборки
+    instructions = (dg.instructions or "").strip() or DEFAULT_MOVIE_INSTRUCTIONS
+    system, user = build_movie_digest_prompt(top, instructions, language, max_chars=900)
+    try:
+        res = LLMClient().chat(system, user, json_mode=True, temperature=0.7,
+                               model=(config.llm_model or None))
+        body, hashtags = parse_ig_parts(res.text)
+    except LLMError as exc:
+        _finish(dg.id, f"LLM: {exc}")
+        return {"ok": False, "note": f"LLM: {exc}"}
+    if not body.strip():
+        _finish(dg.id, "пустой ответ LLM")
+        return {"ok": False, "note": "пустой ответ LLM"}
+
+    caption = _compose(body, hashtags, 1000)
+    poster = next((it.get("poster") for it in top if it.get("poster")), None)
+    comment = _movie_magnet_comment(top)
+
+    # 6) публикация: пост + magnet первым комментарием (плейн-текст)
+    from app.telegram.client import TGClient, TGError
+    with Session(engine) as s:
+        acc = s.get(TGAccount, dg.account_id)
+    if not acc:
+        _finish(dg.id, "Telegram-аккаунт не найден")
+        return {"ok": False, "note": "нет аккаунта"}
+    try:
+        TGClient(acc).send_post(caption, poster, comment, comment_mode="")
+        ok, note = True, f"опубликовано в Telegram ({len(top)} шт., magnet в комментарии)"
+    except TGError as exc:
+        ok, note = False, str(exc)[:200]
+
+    _finish(dg.id, ("опубликован: " if ok else "ошибка: ") + note)
+    if not ok:
+        try:
+            from app.notify import notify_error
+            notify_error(f"Дайджест «{dg.name}» (movies/tg)", note)
+        except Exception:
+            pass
+    return {"ok": ok, "note": note, "items": len(top)}

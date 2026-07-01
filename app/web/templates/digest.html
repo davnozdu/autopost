@@ -24,6 +24,14 @@
     <label>Название</label>
     <input type="text" name="name" value="{{ dg.name }}" required>
 
+    <label>Режим</label>
+    <select name="mode">
+      {% for code, lbl in modes %}
+      <option value="{{ code }}" {% if dg.mode==code %}selected{% endif %}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
+    <p class="muted" style="margin:4px 0 0">«Новости» — пул RSS + Brave. «Новинки кино» — свежие релизы с торрентов (Torznab: Jackett/Prowlarr), рейтинги/постеры OMDb, magnet-ссылки уходят первым комментарием. Кино — только Telegram.</p>
+
     <label>Куда публиковать <span class="muted">(существующий соц-аккаунт — берутся его доступы и публикация)</span></label>
     <select name="target">
       {% for plat, label in [('ig','Instagram'), ('tg','Telegram'), ('x','X')] %}
@@ -82,6 +90,21 @@
         <input type="number" name="collect_limit" value="{{ dg.collect_limit }}" min="3" max="40">
       </div>
     </div>
+
+    <hr class="divider">
+    <h4 style="margin:4px 0 2px">Новинки кино (только режим «Новинки кино»)</h4>
+    <p class="muted" style="margin-top:2px">Источники ниже (RSS-блок) должны быть <b>Torznab feed URL</b> из Prowlarr/Jackett (с apikey). Робот берёт свежие релизы, свернёт дубли, оставит живые раздачи с magnet, возьмёт топ по сидам. В LLM подаётся 2–5 (поле «Новостей в LLM»). Категории Newznab: 2000 фильмы, 5000 сериалы, 5070 аниме, 3000 музыка, 1000/4000 игры, 7000 книги, 8000 другое.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:2;min-width:200px">
+        <label>Категории Torznab <span class="muted">(через запятую)</span></label>
+        <input type="text" name="torznab_categories" value="{{ dg.torznab_categories }}" placeholder="2000,5000">
+      </div>
+      <div style="min-width:150px">
+        <label>Мин. сидов</label>
+        <input type="number" name="min_seeders" value="{{ dg.min_seeders }}" min="0" max="1000">
+      </div>
+    </div>
+    {% if not omdb_set %}<p class="muted">Рейтинги/постеры: задайте ключ OMDb в <a href="/settings">Настройках</a> (иначе будут только названия).</p>{% endif %}
 
     <label style="margin-top:12px"><input type="checkbox" name="enabled" {% if dg.enabled %}checked{% endif %}> Автопилот включён (публиковать ежедневно в заданное время)</label>
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>

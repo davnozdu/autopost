@@ -125,6 +125,9 @@ class AppConfig(SQLModel, table=True):
     llm_fallback_base_url: str = ""          # пусто → base_url пресета
     llm_fallback_key: str = ""               # ключ резервного провайдера (секрет)
     llm_fallback_model: str = ""             # пусто → default_model пресета
+    # OMDb API: рейтинг + постер фильма/сериала для movies-дайджеста (бесплатный
+    # ключ на omdbapi.com). Токены LLM не тратятся.
+    omdb_api_key: str = ""
 
 
 class LLMCache(SQLModel, table=True):
@@ -352,8 +355,21 @@ DEFAULT_DIGEST_INSTRUCTIONS = (
     "в данных)."
 )
 
+# Инструкция по умолчанию для movies-дайджеста (подборка новинок на вечер).
+DEFAULT_MOVIE_INSTRUCTIONS = (
+    "Собери короткую подборку «Что посмотреть вечером» из присланных новинок "
+    "(фильмы/сериалы). По каждому пункту: название с годом, тип (фильм/сериал), "
+    "рейтинг (если есть) и 1 живое предложение — чем цепляет, без спойлеров.\n"
+    "Пиши тепло и по-человечески, без канцелярита. НЕ выдумывай факты и рейтинги — "
+    "бери только из присланных данных. В конце — 3–5 хэштегов.\n"
+    "НЕ вставляй ссылки в текст — magnet-ссылки уйдут отдельным комментарием."
+)
+
 # Тарифы свежести Brave (код → метка).
 BRAVE_FRESHNESS = [("pd", "За сутки"), ("pw", "За неделю"), ("pm", "За месяц")]
+
+# Режимы дайджеста (код → метка).
+DIGEST_MODES = [("news", "Новости"), ("movies", "Новинки кино (торренты)")]
 
 
 class Digest(SQLModel, table=True):
@@ -361,6 +377,7 @@ class Digest(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str
+    mode: str = "news"            # news (новости) | movies (новинки с торрентов, Torznab)
     platform: str = "tg"          # ig | tg | x — целевая соцсеть
     account_id: int = 0           # id соответствующего соц-аккаунта (creds/публикация)
     language: str = ""            # язык поста; пусто → берём язык аккаунта
@@ -371,6 +388,9 @@ class Digest(SQLModel, table=True):
     use_brave: bool = True        # ранжировать через Brave (иначе только по свежести)
     collect_limit: int = 12       # сколько новостей подаём в LLM (это и есть расход токенов)
     jitter_min: int = 0           # случайный сдвиг времени публикации ±N минут
+    # movies-режим (Torznab: Jackett/Prowlarr):
+    torznab_categories: str = "2000,5000"  # Newznab-категории (2000 кино, 5000 сериалы)
+    min_seeders: int = 1          # минимум сидов у релиза (фильтр «живых» раздач)
     enabled: bool = True
     last_run_at: datetime | None = None
     last_note: str = ""

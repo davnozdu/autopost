@@ -327,6 +327,48 @@ def parse_ig_parts(raw: str, fallback_text: str = "") -> tuple[str, list[str]]:
     return caption, clean
 
 
+def build_movie_digest_prompt(
+    items: list[dict],
+    instructions: str,
+    language: str,
+    *,
+    max_chars: int = 0,
+) -> tuple[str, str]:
+    """Промпт подборки «Что посмотреть вечером» из торрент-новинок (movies-дайджест).
+
+    На вход — только название/год/тип/рейтинг/жанр (не magnet, не полный текст).
+    Один вызов LLM. JSON {caption, hashtags}; разбирается parse_ig_parts.
+    """
+    lang = (language or "ru").strip()
+    lines = []
+    for i, it in enumerate(items, 1):
+        kind = "сериал" if it.get("is_series") or it.get("omdb_type") == "series" else "фильм"
+        year = f" ({it['year']})" if it.get("year") else ""
+        rating = f", рейтинг {it['rating']}" if it.get("rating") else ""
+        genre = f", жанр: {it['genre']}" if it.get("genre") else ""
+        title = it.get("omdb_title") or it.get("title") or it.get("raw_title", "")
+        lines.append(f"{i}. {title}{year} — {kind}{rating}{genre}")
+
+    rules = [
+        _lang_rule(lang),
+        "Sestav podle níže uvedených novinek jednu podborku «co se dnes večer podívat» "
+        "pro Telegram. Lidský, živý tón, bez klišé. NEvymýšlej fakta ani hodnocení — "
+        "použij jen dodané údaje. NEvkládej do textu odkazy (magnet odkazy půjdou "
+        "samostatným komentářem).",
+    ]
+    if max_chars:
+        rules.append(f"Text (caption) MAX {max_chars} znaků.")
+    if (instructions or "").strip():
+        rules.append("Pokyny editora (DODRŽ přednostně):\n" + instructions.strip())
+    rules.append(
+        "Vrať POUZE validní JSON: {\"caption\": \"...\", \"hashtags\": [\"...\"]} — "
+        "caption bez hashtagů; hashtags 3–6 bez #, malými písmeny."
+    )
+    system = "Jsi filmový redaktor, který dělá večerní výběr novinek pro Telegram. " + " ".join(rules)
+    user = "Novinky (fily/seriály):\n" + "\n".join(lines) + _lang_reminder(lang)
+    return system, user
+
+
 def parse_gif_query(raw: str) -> str:
     """Достать англ. ключевое слово для GIF из JSON-ответа модели (или '')."""
     data = _extract_json(raw) or {}

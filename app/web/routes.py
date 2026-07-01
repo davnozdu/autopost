@@ -14,6 +14,9 @@ from app import scheduler, services
 from app.config import get_settings
 from app.db.models import (
     BRAVE_FRESHNESS,
+    DEFAULT_DIGEST_INSTRUCTIONS,
+    DEFAULT_MOVIE_INSTRUCTIONS,
+    DIGEST_MODES,
     LANGUAGES,
     WEEKDAYS,
     AppConfig,
@@ -1226,8 +1229,9 @@ def digest_page(request: Request, digest_id: int, msg: str = "") -> HTMLResponse
     return templates.TemplateResponse(
         request, "digest.html",
         {"dg": dg, "sources": sources, "accounts": _digest_accounts(),
-         "languages": LANGUAGES, "freshness": BRAVE_FRESHNESS, "runs": runs,
-         "brave_set": bool(config.brave_api_key), "msg": msg},
+         "languages": LANGUAGES, "freshness": BRAVE_FRESHNESS, "modes": DIGEST_MODES,
+         "runs": runs, "brave_set": bool(config.brave_api_key),
+         "omdb_set": bool(config.omdb_api_key), "msg": msg},
     )
 
 
@@ -1235,6 +1239,7 @@ def digest_page(request: Request, digest_id: int, msg: str = "") -> HTMLResponse
 def save_digest(
     digest_id: int,
     name: str = Form(...),
+    mode: str = Form("news"),
     target: str = Form(""),            # "ig:5" | "tg:2" | "x:1"
     language: str = Form(""),
     publish_time: str = Form("18:00"),
@@ -1244,15 +1249,20 @@ def save_digest(
     use_brave: bool = Form(False),
     collect_limit: int = Form(12),
     jitter_min: int = Form(0),
+    torznab_categories: str = Form("2000,5000"),
+    min_seeders: int = Form(1),
     enabled: bool = Form(False),
 ) -> RedirectResponse:
     allowed_l = {c for c, _ in LANGUAGES}
     allowed_f = {c for c, _ in BRAVE_FRESHNESS}
+    allowed_m = {c for c, _ in DIGEST_MODES}
     with Session(engine) as s:
         dg = s.get(Digest, digest_id)
         if not dg:
             return _redirect("/digests", "Дайджест не найден")
+        prev_mode = dg.mode
         dg.name = name.strip() or "Дайджест"
+        dg.mode = mode if mode in allowed_m else "news"
         if ":" in target:
             plat, _, aid = target.partition(":")
             if plat in ("ig", "tg", "x") and aid.isdigit():
@@ -1260,12 +1270,19 @@ def save_digest(
                 dg.account_id = int(aid)
         dg.language = language if language in allowed_l else ""
         dg.publish_time = publish_time.strip() or "18:00"
-        dg.instructions = instructions
+        # при переключении на movies с дефолтной новостной инструкцией — подставить киношную
+        if (dg.mode == "movies" and prev_mode != "movies"
+                and instructions.strip() in ("", DEFAULT_DIGEST_INSTRUCTIONS.strip())):
+            dg.instructions = DEFAULT_MOVIE_INSTRUCTIONS
+        else:
+            dg.instructions = instructions
         dg.brave_query = brave_query.strip()
         dg.brave_freshness = brave_freshness if brave_freshness in allowed_f else "pd"
         dg.use_brave = use_brave
-        dg.collect_limit = max(3, min(40, collect_limit))
+        dg.collect_limit = max(2, min(40, collect_limit))
         dg.jitter_min = max(0, min(60, jitter_min))
+        dg.torznab_categories = torznab_categories.strip() or "2000,5000"
+        dg.min_seeders = max(0, min(1000, min_seeders))
         dg.enabled = enabled
         s.add(dg)
         s.commit()
@@ -1366,6 +1383,7 @@ def save_settings(
     notify_daily_time: str = Form("09:00"),
     giphy_api_key: str = Form(""),
     brave_api_key: str = Form(""),
+    omdb_api_key: str = Form(""),
     llm_fallback_enabled: bool = Form(False),
     llm_fallback_provider: str = Form("openai"),
     llm_fallback_base_url: str = Form(""),
@@ -1406,6 +1424,9 @@ def save_settings(
             # ключ Brave Search пустой = не менять (секрет)
             if brave_api_key.strip():
                 config.brave_api_key = brave_api_key.strip()
+            # ключ OMDb пустой = не менять (секрет)
+            if omdb_api_key.strip():
+                config.omdb_api_key = omdb_api_key.strip()
         s.add(config)
         s.commit()
     scheduler.reload_jobs()  # перерегистрировать задачу ежедневной сводки

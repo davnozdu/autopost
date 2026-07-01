@@ -116,11 +116,12 @@ class TGClient:
         return None, None
 
     def send_post(self, caption: str, image_url: str | None,
-                  comment_html: str = "") -> str:
-        """Основной пост (текст/фото, без ссылки) + ссылка первым комментарием.
+                  comment_html: str = "", comment_mode: str = "HTML") -> str:
+        """Основной пост (текст/фото, без ссылки) + первый комментарий.
 
         Комментарий уходит в группу обсуждений ответом на авто-пересланный пост
-        (для канала). Запасной вариант — ответ в том же чате (обычная группа).
+        (для канала). `comment_mode`: "HTML" (кликабельная ссылка-бэклинк) или ""
+        (плейн-текст — для magnet-ссылок, Telegram делает их тапабельными сам).
         Возвращает message_id основного поста. Ошибка комментария не валит пост.
         """
         text = caption or ""
@@ -144,12 +145,13 @@ class TGClient:
 
         if comment_html.strip() and mid:
             try:
-                self._post_comment(int(mid), comment_html)
+                self._post_comment(int(mid), comment_html, comment_mode)
             except Exception:
                 pass  # комментарий best-effort
         return str(mid or "")
 
-    def _post_comment(self, posted_msg_id: int, comment_html: str) -> None:
+    def _post_comment(self, posted_msg_id: int, comment: str,
+                      mode: str = "HTML") -> None:
         """Отправить бэклинк первым комментарием.
 
         Канал с группой обсуждений: отвечаем на авто-пересланную копию поста в
@@ -162,21 +164,20 @@ class TGClient:
         ctype = info.get("type")
         linked = info.get("linked_chat_id")
 
+        def _payload(chat_id, reply_to):
+            p = {"chat_id": chat_id, "text": comment[:TG_TEXT_LIMIT],
+                 "reply_to_message_id": reply_to, "disable_web_page_preview": True}
+            if mode:  # "" → плейн-текст (для magnet), иначе parse_mode
+                p["parse_mode"] = mode
+            return p
+
         # Канал (или чат со связанной группой обсуждений)
         if ctype == "channel" or linked:
             grp_chat, grp_msg = self._find_discussion_message(posted_msg_id, linked)
             if grp_chat and grp_msg:
-                self._call("sendMessage", {
-                    "chat_id": grp_chat, "text": comment_html[:TG_TEXT_LIMIT],
-                    "parse_mode": "HTML", "reply_to_message_id": grp_msg,
-                    "disable_web_page_preview": True,
-                })
+                self._call("sendMessage", _payload(grp_chat, grp_msg))
             # не нашли копию в группе — пропускаем (без ответа в канале)
             return
 
         # Обычная группа/супергруппа: отвечаем на сам пост в этом же чате
-        self._call("sendMessage", {
-            "chat_id": self.chat_id, "text": comment_html[:TG_TEXT_LIMIT],
-            "parse_mode": "HTML", "reply_to_message_id": posted_msg_id,
-            "disable_web_page_preview": True,
-        })
+        self._call("sendMessage", _payload(self.chat_id, posted_msg_id))
