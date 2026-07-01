@@ -1324,11 +1324,12 @@ def digest_run_now(digest_id: int) -> RedirectResponse:
     from app.digest.service import run_digest
 
     res = run_digest(digest_id)
+    note = res.get("note", "")
     if res.get("ok"):
-        msg = f"Опубликован ✓ (новостей: {res.get('items', 0)}, Brave: {res.get('brave', 0)})"
+        msg = f"✓ {note} · позиций: {res.get('items', 0)}"
     else:
-        msg = f"Не опубликован: {res.get('note', '')[:160]}"
-    return _redirect(f"/digests/{digest_id}", msg)
+        msg = f"✗ Не опубликован: {note}"
+    return _redirect(f"/digests/{digest_id}", msg[:200])
 
 
 @router.post("/digests/{digest_id}/sources")
