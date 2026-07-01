@@ -20,6 +20,14 @@ def _headers(api_key: str) -> dict:
     return {"X-Api-Key": api_key.strip(), "Accept": "application/json"}
 
 
+def _base(url: str) -> str:
+    """Нормализовать адрес: добавить http:// если забыли, убрать хвостовой /."""
+    u = (url or "").strip().rstrip("/")
+    if u and not u.lower().startswith(("http://", "https://")):
+        u = "http://" + u
+    return u
+
+
 def _to_int(v) -> int:
     try:
         return int(v)
@@ -30,7 +38,7 @@ def _to_int(v) -> int:
 def search(base_url: str, api_key: str, categories: str,
            limit: int = 100, timeout: int = 40) -> list[dict]:
     """Свежие релизы из ВСЕХ индексаторов Prowlarr по выбранным категориям."""
-    base = (base_url or "").strip().rstrip("/")
+    base = _base(base_url)
     key = (api_key or "").strip()
     if not base or not key:
         return []
@@ -85,20 +93,34 @@ def search(base_url: str, api_key: str, categories: str,
 
 def list_indexers(base_url: str, api_key: str, timeout: int = 20) -> list[dict]:
     """Список настроенных индексаторов (для кнопки «Проверить Prowlarr»)."""
-    base = (base_url or "").strip().rstrip("/")
+    return check(base_url, api_key, timeout).get("indexers", [])
+
+
+def check(base_url: str, api_key: str, timeout: int = 20) -> dict:
+    """Диагностика подключения к Prowlarr → {ok, reason, indexers}."""
+    base = _base(base_url)
     key = (api_key or "").strip()
     if not base or not key:
-        return []
+        return {"ok": False, "reason": "не задан адрес или API-ключ Prowlarr", "indexers": []}
     try:
         resp = httpx.get(f"{base}/api/v1/indexer", headers=_headers(key), timeout=timeout)
-        if resp.status_code >= 400:
-            return []
+    except httpx.HTTPError as exc:
+        return {"ok": False, "indexers": [],
+                "reason": f"не удалось подключиться к {base} — контейнер не видит Prowlarr "
+                          f"или адрес неверный ({type(exc).__name__})"}
+    if resp.status_code == 401:
+        return {"ok": False, "reason": "неверный API-ключ Prowlarr (401)", "indexers": []}
+    if resp.status_code >= 400:
+        return {"ok": False, "reason": f"Prowlarr вернул HTTP {resp.status_code}", "indexers": []}
+    try:
         data = resp.json()
-    except (httpx.HTTPError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    return [{"id": x.get("id"),
-             "name": x.get("name") or x.get("definitionName") or "?",
-             "enable": bool(x.get("enable"))}
-            for x in data]
+    except ValueError:
+        return {"ok": False, "reason": "Prowlarr вернул не JSON", "indexers": []}
+    if not isinstance(data, list) or not data:
+        return {"ok": False, "reason": "подключились, но индексаторов нет — добавьте их в Prowlarr",
+                "indexers": []}
+    idx = [{"id": x.get("id"),
+            "name": x.get("name") or x.get("definitionName") or "?",
+            "enable": bool(x.get("enable"))}
+           for x in data]
+    return {"ok": True, "reason": "", "indexers": idx}

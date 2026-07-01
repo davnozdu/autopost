@@ -1459,12 +1459,13 @@ def settings_prowlarr_test() -> RedirectResponse:
 
     with Session(engine) as s:
         cfg = s.get(AppConfig, 1) or AppConfig(id=1)
-    idxs = prowlarr.list_indexers(cfg.prowlarr_url, cfg.prowlarr_api_key)
-    if not idxs:
-        msg = "Prowlarr не отвечает или без индексаторов — проверьте URL/ключ (сохраните сначала)"
-    else:
+    res = prowlarr.check(cfg.prowlarr_url, cfg.prowlarr_api_key)
+    if res.get("ok"):
+        idxs = res["indexers"]
         on = [i["name"] for i in idxs if i["enable"]]
         msg = f"Prowlarr ✓ индексаторов: {len(idxs)}, включено: {len(on)} — " + ", ".join(on[:6])
+    else:
+        msg = "Prowlarr ✗ " + res.get("reason", "ошибка")
     return _redirect("/settings", msg[:200])
 
 
