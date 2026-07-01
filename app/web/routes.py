@@ -554,6 +554,15 @@ def ig_publish_now(account_id: int, kind: str = Form("post")) -> RedirectRespons
                      f"{res.get('note', '')} (опубликовано {res.get('published', 0)})")
 
 
+@router.post("/instagram/{account_id}/check-gif")
+def ig_check_gif(account_id: int) -> RedirectResponse:
+    from app.instagram.service import check_gif
+
+    res = check_gif(account_id)
+    prefix = "GIF ✓ " if res.get("ok") else "GIF ✗ "
+    return _redirect(f"/instagram/{account_id}", prefix + res.get("note", "")[:200])
+
+
 # ── Instagram: источники и посты ──────────────────────────────────────
 @router.post("/instagram/{account_id}/sources")
 def ig_add_source(

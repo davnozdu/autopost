@@ -83,7 +83,11 @@
       <input type="hidden" name="kind" value="story">
       <button type="submit">Опубликовать сториз сейчас</button>
     </form>
+    <form method="post" action="/instagram/{{ acc.id }}/check-gif">
+      <button type="submit">Проверить GIF</button>
+    </form>
   </div>
+  <p class="muted" style="margin:8px 0 0">«Проверить GIF» прогоняет цепочку без публикации (тумблер → ключ Giphy → поиск стикеров → сборка) и говорит, где обрыв. GIF-стикер добавляется только в <b>сториз</b>, не в посты ленты.</p>
   {% if runs %}
   <p class="muted" style="margin-bottom:0">Ближайшие запуски:
     {% for r in runs %}<br>{{ r.id }} → {{ r.next_run or "—" }}{% endfor %}

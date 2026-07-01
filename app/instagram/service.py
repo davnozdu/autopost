@@ -308,6 +308,48 @@ def _story_gif_ids(acc: IGAccount, post: IGPost) -> list[str]:
     return giphy.search_sticker_ids(api_key, query, lang=acc.language or "en")
 
 
+def check_gif(account_id: int) -> dict:
+    """Самопроверка цепочки GIF-стикера БЕЗ публикации: тумблер → ключ Giphy →
+    поиск стикеров → сборка StorySticker. Возвращает, на каком звене обрыв."""
+    with Session(engine) as s:
+        acc = s.get(IGAccount, account_id)
+        if not acc:
+            return {"ok": False, "note": "аккаунт не найден"}
+        config = s.get(AppConfig, 1) or AppConfig(id=1)
+    key = (getattr(config, "giphy_api_key", "") or "").strip()
+    gif_on = bool(getattr(acc, "story_gif", False))
+    stories_on = bool((acc.story_times or "").strip())
+
+    # 1) тумблер и расписание сторис (GIF есть ТОЛЬКО в сторис)
+    if not gif_on:
+        return {"ok": False, "note": "Тумблер «GIF-стикер» у аккаунта выключен — включите его."}
+    if not stories_on:
+        return {"ok": False, "note": "Времена сторис не заданы (story_times пусто). "
+                "GIF вставляется только в сторис — задайте хотя бы одно время."}
+    # 2) ключ Giphy
+    if not key:
+        return {"ok": False, "note": "Ключ Giphy не задан в Настройках → гифок не будет. "
+                "Впишите бесплатный ключ с developers.giphy.com."}
+    # 3) реальный поиск стикеров (проверяет и валидность ключа, и доступность Giphy)
+    from app.instagram import giphy
+    query = giphy.build_query(["cinema"], "movie premiere trailer")
+    ids = giphy.search_sticker_ids(key, query, lang=acc.language or "en")
+    if not ids:
+        return {"ok": False, "note": f"Giphy не вернул стикеров по «{query}» — "
+                "вероятно неверный ключ или лимит/сбой Giphy."}
+    # 4) сборка стикера так же, как при публикации (проверка instagrapi.types)
+    try:
+        from instagrapi.types import StorySticker
+        StorySticker(type="gif", id=str(ids[0]), x=0.5, y=0.4,
+                     width=0.3, height=0.3, extra={"str_id": str(ids[0])})
+    except Exception as exc:
+        return {"ok": False, "note": f"instagrapi не собрал GIF-стикер: "
+                f"{type(exc).__name__}: {str(exc)[:120]}. Нажмите «Обновить instagrapi»."}
+    return {"ok": True, "note": f"OK: ключ работает, Giphy отдал {len(ids)} стикеров "
+            f"по «{query}», стикер собирается. Опубликуйте сторис — GIF должен появиться. "
+            "Если его всё равно нет — Instagram отклонил стикер (смотрите заметку у поста)."}
+
+
 def _send_post(igc: IGClient, acc: IGAccount, post: IGPost, as_kind: str) -> str:
     """Подготовить медиа и опубликовать (пост или сториз с текстом+музыкой). → pk."""
     if as_kind == "story":

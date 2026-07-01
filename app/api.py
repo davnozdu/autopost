@@ -202,6 +202,13 @@ def ig_publish(account_id: int, kind: str = "post") -> dict:
     return run_ig_publish(account_id, "story" if kind == "story" else "post", count=1)
 
 
+@api_router.post("/ig/{account_id}/check-gif", dependencies=[Depends(require_api_key)])
+def ig_check_gif(account_id: int) -> dict:
+    from app.instagram.service import check_gif
+
+    return check_gif(account_id)
+
+
 # ── Telegram ──────────────────────────────────────────────────────────
 @api_router.post("/tg/{account_id}/verify", dependencies=[Depends(require_api_key)])
 def tg_verify(account_id: int) -> dict:
