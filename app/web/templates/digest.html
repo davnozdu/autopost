@@ -143,8 +143,13 @@
 
 <!-- Источники -->
 <div class="card">
+  {% if dg.mode == 'movies' %}
+  <h3 class="card-title">Torznab-фолбэк <span class="muted" style="font-weight:400">(необязательно)</span></h3>
+  <p class="muted" style="margin-top:0"><b>Для «Новинок кино» это НЕ нужно, если задан Prowlarr</b> — источники берутся автоматически из него. Сюда добавляют только <b>Torznab-эндпоинты</b> (Jackett/Prowlarr, с <code>apikey</code> и <code>t=search</code>) как запас, если Prowlarr не используется. <b>Обычные RSS-ленты сюда класть нельзя</b> — тогда в подборку попадают не-фильмы (сборники, каналы, старьё). Если Prowlarr настроен — оставьте пусто.</p>
+  {% else %}
   <h3 class="card-title">RSS-источники дайджеста</h3>
   <p class="muted" style="margin-top:0">Свой список лент именно для этого дайджеста. Из них собирается пул новостей дня (без LLM), который затем ранжируется и сворачивается в один пост.</p>
+  {% endif %}
   <form method="post" action="/digests/{{ dg.id }}/sources">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:120px">
@@ -152,8 +157,8 @@
         <input type="text" name="name" required placeholder="ČT24 / IMDb">
       </div>
       <div style="flex:2;min-width:200px">
-        <label style="margin-top:0">RSS URL</label>
-        <input type="url" name="url" required placeholder="https://.../rss">
+        <label style="margin-top:0">{% if dg.mode == 'movies' %}Torznab URL{% else %}RSS URL{% endif %}</label>
+        <input type="url" name="url" required placeholder="{% if dg.mode == 'movies' %}https://prowlarr…/…/api?apikey=…&t=search{% else %}https://.../rss{% endif %}">
       </div>
       <button class="primary" type="submit">Добавить</button>
     </div>
@@ -180,7 +185,11 @@
     </form>
     {% endfor %}
   {% else %}
+  {% if dg.mode == 'movies' %}
+  <p class="muted">Пусто — так и надо: для «Новинок кино» источники берутся из Prowlarr.</p>
+  {% else %}
   <p class="muted">Источников пока нет — добавьте хотя бы один.</p>
+  {% endif %}
   {% endif %}
 </div>
 
