@@ -364,20 +364,29 @@ def _build_movie_caption(items: list[dict], intro: str, hashtags: list[str],
 
 
 def _movie_magnet_comment(items: list[dict]) -> str:
-    """Первый комментарий: список «Название (год) — ссылка», по одному на строку.
+    """Первый комментарий: по каждому фильму — название, короткое описание и
+    magnet-ссылка для скачивания (плейн-текст → Telegram делает magnet тапабельным).
 
-    Ссылка — magnet (плейн-текст, Telegram делает тапабельным); если magnet нет —
-    страница трекера. Download-ссылку Prowlarr НЕ публикуем (в ней apikey и адрес
-    сервера)."""
-    lines = []
+    Если magnet нет — ссылка на страницу трекера. Download-ссылку Prowlarr НЕ
+    публикуем (в ней apikey и адрес сервера)."""
+    blocks = []
     for it in items:
         icon = "📺" if (it.get("is_series") or it.get("omdb_type") == "series") else "🎬"
         title = it.get("omdb_title") or it.get("title") or it.get("raw_title", "")
         year = f" ({it['year']})" if it.get("year") else ""
         link = it.get("magnet") or it.get("page_url") or ""
-        if link:
-            lines.append(f"{icon} {title}{year} — {link}")
-    return "\n\n".join(lines)
+        if not link:
+            continue
+        block = f"{icon} {title}{year}"
+        ov = (it.get("overview") or "").strip()
+        if ov:
+            ov = ov.split(". ")[0].strip().rstrip(".")
+            if len(ov) > 220:
+                ov = ov[:217].rstrip() + "…"
+            block += f"\n{ov}"
+        block += f"\n{link}"
+        blocks.append(block)
+    return "\n\n".join(blocks)
 
 
 def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: str) -> dict:

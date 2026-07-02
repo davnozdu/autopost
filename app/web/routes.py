@@ -1459,6 +1459,16 @@ def save_settings(
     return _redirect("/settings", "Настройки сохранены")
 
 
+@router.post("/settings/tmdb-test")
+def settings_tmdb_test() -> RedirectResponse:
+    from app.digest.ratings import check_tmdb
+
+    with Session(engine) as s:
+        cfg = s.get(AppConfig, 1) or AppConfig(id=1)
+    res = check_tmdb(cfg.tmdb_api_key)
+    return _redirect("/settings", ("TMDb ✓ " if res.get("ok") else "TMDb ✗ ") + res.get("reason", ""))
+
+
 @router.post("/settings/prowlarr-test")
 def settings_prowlarr_test() -> RedirectResponse:
     from app.digest import prowlarr

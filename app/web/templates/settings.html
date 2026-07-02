@@ -49,8 +49,11 @@
     <div style="margin-top:12px"><button class="primary" type="submit">Сохранить</button></div>
   </form>
   <hr class="divider">
-  <form method="post" action="/settings/prowlarr-test"><button type="submit">Проверить Prowlarr</button></form>
-  <p class="muted" style="margin-bottom:0">Покажет, сколько индексаторов видит Prowlarr (по сохранённым настройкам).</p>
+  <div class="actions">
+    <form method="post" action="/settings/prowlarr-test"><button type="submit">Проверить Prowlarr</button></form>
+    <form method="post" action="/settings/tmdb-test"><button type="submit">Проверить TMDb</button></form>
+  </div>
+  <p class="muted" style="margin-bottom:0">Проверки — по сохранённым настройкам: Prowlarr покажет число индексаторов, TMDb — нашёлся ли тестовый фильм (рейтинг/постер).</p>
 </div>
 
 <div class="card">

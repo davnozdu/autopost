@@ -31,22 +31,60 @@ def enrich(item: dict, omdb_key: str = "", tmdb_key: str = "", timeout: int = 15
         _omdb(item, omdb_key.strip(), timeout)  # даёт настоящий рейтинг IMDb
 
 
+def check_tmdb(tmdb_key: str, timeout: int = 15) -> dict:
+    """Проверка ключа TMDb на тестовом фильме → {ok, reason}."""
+    key = (tmdb_key or "").strip()
+    if not key:
+        return {"ok": False, "reason": "ключ TMDb не задан"}
+    auth, headers = _tmdb_auth(key)
+    try:
+        r = httpx.get(f"{TMDB_URL}/search/movie",
+                      params={**auth, "query": "The Matrix", "year": "1999", "language": "ru-RU"},
+                      headers=headers, timeout=timeout)
+    except httpx.HTTPError as exc:
+        return {"ok": False, "reason": f"не удалось подключиться к TMDb ({type(exc).__name__})"}
+    if r.status_code == 401:
+        return {"ok": False, "reason": "неверный ключ (401) — нужен API key v3 или Read Access Token v4"}
+    if r.status_code >= 400:
+        return {"ok": False, "reason": f"TMDb вернул HTTP {r.status_code}"}
+    try:
+        res = (r.json().get("results") or [])
+    except ValueError:
+        return {"ok": False, "reason": "TMDb вернул не JSON"}
+    if not res:
+        return {"ok": False, "reason": "TMDb ответил, но без результатов"}
+    top = res[0]
+    return {"ok": True, "reason": f"OK — {top.get('title')} · рейтинг {top.get('vote_average')} · "
+            f"постер {'есть' if top.get('poster_path') else 'нет'}"}
+
+
+def _tmdb_auth(key: str) -> tuple[dict, dict]:
+    """TMDb принимает два ключа: v3 (короткий, ?api_key=) и v4 (длинный JWT, Bearer).
+    Определяем по виду ключа и возвращаем (extra_params, headers)."""
+    key = key.strip()
+    if key.startswith("eyJ") or len(key) > 60:      # v4 Read Access Token (JWT)
+        return {}, {"Authorization": f"Bearer {key}"}
+    return {"api_key": key}, {}                       # v3 API key
+
+
 def _tmdb(item: dict, key: str, timeout: int) -> None:
     query = (item.get("en_title") or item.get("title") or "").strip()
     if not query:
         return
+    auth_params, headers = _tmdb_auth(key)
     is_series = bool(item.get("is_series"))
     endpoint = "tv" if is_series else "movie"
-    params = {"api_key": key, "query": query, "language": "ru-RU", "include_adult": "false"}
+    params = {**auth_params, "query": query, "language": "ru-RU", "include_adult": "false"}
     if item.get("year"):
         params["first_air_date_year" if is_series else "year"] = item["year"]
     try:
-        data = httpx.get(f"{TMDB_URL}/search/{endpoint}", params=params, timeout=timeout).json()
+        data = httpx.get(f"{TMDB_URL}/search/{endpoint}", params=params,
+                         headers=headers, timeout=timeout).json()
         results = data.get("results") or []
         if not results:
             data = httpx.get(f"{TMDB_URL}/search/multi",
-                             params={"api_key": key, "query": query, "language": "ru-RU"},
-                             timeout=timeout).json()
+                             params={**auth_params, "query": query, "language": "ru-RU"},
+                             headers=headers, timeout=timeout).json()
             results = [r for r in (data.get("results") or [])
                        if r.get("media_type") in ("movie", "tv")]
     except (httpx.HTTPError, ValueError):
