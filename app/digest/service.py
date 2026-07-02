@@ -37,7 +37,7 @@ from app.digest import brave
 from app.llm.client import LLMClient, LLMError
 from app.llm.prompt import build_digest_prompt, build_movie_digest_prompt, parse_ig_parts
 from app.scraper.rss import peek_feed
-from app.util import clean_image_url
+from app.util import clean_image_url, truncate_html
 
 # Лимит символов поста по площадке (caption). TG с фото ограничен 1024 — берём с
 # запасом; X — короткий твит.
@@ -360,7 +360,7 @@ def _build_movie_caption(items: list[dict], intro: str, hashtags: list[str],
     if tags:
         blocks.append(tags)
     cap = "\n\n".join(blocks)
-    return cap[:max_chars] if len(cap) > max_chars else cap
+    return truncate_html(cap, max_chars)  # не рвать <b>/<i> при переполнении
 
 
 def _movie_magnet_comment(items: list[dict]) -> str:
@@ -509,6 +509,11 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         links = sum(1 for it in top if it.get("magnet") or it.get("page_url"))
         ok, note = True, (f"опубликовано в Telegram ({len(top)} шт.: постеров {len(posters)}, "
                           f"рейтингов {rats}, ссылок в комментарии {links})")
+        if comment and client.last_comment_ok is False:
+            # пост обещает magnet «в первом комментарии», но копию в группе
+            # обсуждений найти не удалось → комментарий не отправлен
+            note += (" · ⚠️ комментарий с magnet НЕ отправлен: сделайте бота "
+                     "администратором группы обсуждений канала")
         if not posters and not rats:
             note += " · нет постеров/рейтингов — задайте ключ TMDb в Настройках"
     except TGError as exc:

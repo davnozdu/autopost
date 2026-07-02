@@ -9,7 +9,7 @@ import time
 
 import httpx
 
-from app.util import clean_image_url
+from app.util import clean_image_url, truncate_html
 
 API = "https://api.telegram.org/bot{token}/{method}"
 TG_CAPTION_LIMIT = 1024   # лимит подписи к фото
@@ -27,6 +27,14 @@ class TGClient:
         if not self.token or not self.chat_id:
             raise TGError("Не заданы токен бота или chat_id")
         self._chat_cache: dict | None = None
+        # результат последней попытки первого комментария: None — не запрашивали,
+        # True — отправлен, False — не удалось (напр. не нашли копию в группе).
+        self.last_comment_ok: bool | None = None
+
+    @staticmethod
+    def _cap(text: str, limit: int, mode: str) -> str:
+        """Обрезать подпись под лимит. Для HTML — не разрывая теги/сущности."""
+        return truncate_html(text, limit) if mode == "HTML" else (text or "")[:limit]
 
     def _call(self, method: str, payload: dict | None = None) -> dict:
         url = API.format(token=self.token, method=method)
@@ -129,14 +137,15 @@ class TGClient:
         mid = None
         if img:
             try:
-                p = {"chat_id": self.chat_id, "photo": img, "caption": text[:TG_CAPTION_LIMIT]}
+                p = {"chat_id": self.chat_id, "photo": img,
+                     "caption": self._cap(text, TG_CAPTION_LIMIT, caption_mode)}
                 if caption_mode:
                     p["parse_mode"] = caption_mode
                 mid = self._call("sendPhoto", p).get("message_id")
             except TGError:
                 mid = None  # картинка не принялась — отправим текстом ниже
         if mid is None:
-            p = {"chat_id": self.chat_id, "text": text[:TG_TEXT_LIMIT],
+            p = {"chat_id": self.chat_id, "text": self._cap(text, TG_TEXT_LIMIT, caption_mode),
                  "disable_web_page_preview": True}
             if caption_mode:
                 p["parse_mode"] = caption_mode
@@ -144,9 +153,9 @@ class TGClient:
 
         if comment_html.strip() and mid:
             try:
-                self._post_comment(int(mid), comment_html, comment_mode)
+                self.last_comment_ok = self._post_comment(int(mid), comment_html, comment_mode)
             except Exception:
-                pass  # комментарий best-effort
+                self.last_comment_ok = False  # комментарий best-effort
         return str(mid or "")
 
     def send_album(self, caption: str, image_urls: list[str],
@@ -165,7 +174,7 @@ class TGClient:
         for i, u in enumerate(urls):
             m = {"type": "photo", "media": u}
             if i == 0 and caption:
-                m["caption"] = caption[:TG_CAPTION_LIMIT]
+                m["caption"] = self._cap(caption, TG_CAPTION_LIMIT, caption_mode)
                 if caption_mode:
                     m["parse_mode"] = caption_mode
             media.append(m)
@@ -176,27 +185,27 @@ class TGClient:
             return self.send_post(caption, urls[0], comment_html, comment_mode, caption_mode)
         if comment_html.strip() and mid:
             try:
-                self._post_comment(int(mid), comment_html, comment_mode)
+                self.last_comment_ok = self._post_comment(int(mid), comment_html, comment_mode)
             except Exception:
-                pass
+                self.last_comment_ok = False
         return str(mid or "")
 
     def _post_comment(self, posted_msg_id: int, comment: str,
-                      mode: str = "HTML") -> None:
-        """Отправить бэклинк первым комментарием.
+                      mode: str = "HTML") -> bool:
+        """Отправить бэклинк первым комментарием. Вернуть True, если отправлен.
 
         Канал с группой обсуждений: отвечаем на авто-пересланную копию поста в
         ГРУППЕ (→ комментарий в «Прокомментировать»). Если копию не нашли —
-        НИЧЕГО не отправляем: ответ в самом канале превратился бы в пост-цитату
-        («комментарий как бы в репосте»). Обычная группа (chat_id — сама группа):
-        отвечаем на наш же пост в этом чате.
+        НИЧЕГО не отправляем (→ False): ответ в самом канале превратился бы в
+        пост-цитату («комментарий как бы в репосте»). Обычная группа (chat_id —
+        сама группа): отвечаем на наш же пост в этом чате.
         """
         info = self._chat_info()
         ctype = info.get("type")
         linked = info.get("linked_chat_id")
 
         def _payload(chat_id, reply_to):
-            p = {"chat_id": chat_id, "text": comment[:TG_TEXT_LIMIT],
+            p = {"chat_id": chat_id, "text": self._cap(comment, TG_TEXT_LIMIT, mode),
                  "reply_to_message_id": reply_to, "disable_web_page_preview": True}
             if mode:  # "" → плейн-текст (для magnet), иначе parse_mode
                 p["parse_mode"] = mode
@@ -207,8 +216,9 @@ class TGClient:
             grp_chat, grp_msg = self._find_discussion_message(posted_msg_id, linked)
             if grp_chat and grp_msg:
                 self._call("sendMessage", _payload(grp_chat, grp_msg))
-            # не нашли копию в группе — пропускаем (без ответа в канале)
-            return
+                return True
+            return False  # не нашли копию в группе — пропускаем (без ответа в канале)
 
         # Обычная группа/супергруппа: отвечаем на сам пост в этом же чате
         self._call("sendMessage", _payload(self.chat_id, posted_msg_id))
+        return True

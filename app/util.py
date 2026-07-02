@@ -55,6 +55,33 @@ def lang_name(seg: str) -> str:
     return LANG_NAME.get(seg, seg)
 
 
+def truncate_html(s: str, limit: int) -> str:
+    """Обрезать HTML-строку до limit символов, НЕ разрывая теги/сущности.
+
+    Telegram с parse_mode=HTML отвергает сообщение, если срез попал внутрь тега
+    (`<b`) или html-сущности (`&amp`). Поэтому: отступаем от границы среза за
+    незакрытый `<` или `&`, добавляем «…» и дозакрываем незакрытые парные теги
+    (используются только простые `<b>`/`<i>`). Строки короче limit — как есть.
+    """
+    if s is None:
+        return ""
+    if len(s) <= limit:
+        return s
+    cut = s[:limit]
+    amp = cut.rfind("&")           # не рвать html-сущность (&amp; &lt; …)
+    if amp != -1 and ";" not in cut[amp:]:
+        cut = cut[:amp]
+    lt = cut.rfind("<")            # не рвать тег (<b>, </i>)
+    if lt != -1 and ">" not in cut[lt:]:
+        cut = cut[:lt]
+    cut = cut.rstrip()
+    for tag in ("b", "i"):         # дозакрыть незакрытые парные теги
+        opens = len(re.findall(rf"<{tag}>", cut))
+        closes = len(re.findall(rf"</{tag}>", cut))
+        cut += f"</{tag}>" * max(0, opens - closes)
+    return cut + "…"
+
+
 def clean_image_url(url: str | None) -> str | None:
     """Починить «склеенный» URL вида https://domainhttps://real → https://real.
 

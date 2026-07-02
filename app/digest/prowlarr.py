@@ -9,6 +9,7 @@ magnet/infoHash Prowlarr обычно не отдаёт (как и Torznab) — 
 .torrent по downloadUrl (см. app/digest/torrentfile.py).
 """
 
+import re
 from urllib.parse import quote
 
 import httpx
@@ -32,7 +33,10 @@ def _to_int(v) -> int:
     try:
         return int(v)
     except (TypeError, ValueError):
-        return 0
+        pass
+    # строковый вид с мусором/префиксом (напр. imdbId="tt1234567") → цифры
+    digits = re.sub(r"[^\d]", "", str(v or ""))
+    return int(digits) if digits else 0
 
 
 def search(base_url: str, api_key: str, categories: str,
