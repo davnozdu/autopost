@@ -459,19 +459,44 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
         return (rel, _parse_ts(x.get("pubdate", "")) or _old, x.get("seeders", 0))
 
     fresh.sort(key=_movie_score, reverse=True)
-    top = fresh[: min(max(dg.collect_limit, 2), 5)]
+    want = min(max(dg.collect_limit, 2), 5)
+    tmdb_on = bool((config.tmdb_api_key or "").strip())
 
-    # 4) для выбранных: если magnet нет — добыть из .torrent (через download-ссылку
-    #    Prowlarr); английское название для OMDb. Только 2–5 штук → дёшево.
+    # 5) ОБОГАЩЕНИЕ + ОТБОР ПО КАЧЕСТВУ. Обогащаем ШИРОКИЙ пул кандидатов (TMDb/
+    #    OMDb — дёшево, без токенов) и оставляем только РЕАЛЬНО РАСПОЗНАННЫЕ
+    #    фильмы/сериалы (есть рейтинг/описание/постер). Так в пост не попадают
+    #    мусорные раздачи (YouTube-каналы, сборники, старьё без года), а у каждого
+    #    фильма гарантированно есть карточка с описанием. Без ключа TMDb
+    #    распознавания нет — тогда работаем по заголовкам (старое поведение).
+    candidates = fresh[: max(want * 3, 12)]
+    for it in candidates:
+        it["en_title"] = _english_title(it.get("title", ""))
+        ratings.enrich(it, config.omdb_api_key, config.tmdb_api_key)
+
+    def _recognized(it: dict) -> bool:
+        return bool(it.get("rating") or it.get("overview") or it.get("poster"))
+
+    if tmdb_on:
+        recognized = [it for it in candidates if _recognized(it)]
+        if recognized:
+            top = recognized[:want]
+        else:
+            # ключ задан, но ни одной раздачи TMDb не распознал: либо ключ
+            # невалиден, либо в выдаче нет фильмов. Мусор не публикуем.
+            msg = (f"TMDb не распознал ни одной из {len(candidates)} раздач — "
+                   f"проверьте ключ TMDb («Проверить TMDb» в Настройках) или "
+                   f"категории Prowlarr")
+            _finish(dg.id, msg)
+            return {"ok": False, "note": "TMDb 0 распознано — проверьте ключ/категории"}
+    else:
+        top = candidates[:want]  # без ключа TMDb — по заголовкам
+
+    # 6) magnet для выбранных: если нет — добыть из .torrent (download-ссылка
+    #    Prowlarr). Только финальные 2–5 штук → дёшево.
     for it in top:
         if not it.get("magnet") and it.get("download_url"):
             nm = it.get("title") or it.get("raw_title")
             it["magnet"] = torrentfile.magnet_from_url(it["download_url"], name=nm) or ""
-        it["en_title"] = _english_title(it.get("title", ""))
-
-    # 5) рейтинг + постер (TMDb → OMDb, без токенов)
-    for it in top:
-        ratings.enrich(it, config.omdb_api_key, config.tmdb_api_key)
 
     # 6) ОДИН вызов LLM → подпись подборки
     instructions = (dg.instructions or "").strip() or DEFAULT_MOVIE_INSTRUCTIONS
@@ -514,8 +539,8 @@ def _run_movies_digest(dg: Digest, sources: list, config: AppConfig, language: s
             # обсуждений найти не удалось → комментарий не отправлен
             note += (" · ⚠️ комментарий с magnet НЕ отправлен: сделайте бота "
                      "администратором группы обсуждений канала")
-        if not posters and not rats:
-            note += " · нет постеров/рейтингов — задайте ключ TMDb в Настройках"
+        if not tmdb_on:
+            note += " · ключ TMDb не задан — без рейтингов/описаний/постеров"
     except TGError as exc:
         ok, note = False, str(exc)[:200]
 
